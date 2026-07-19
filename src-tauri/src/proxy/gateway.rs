@@ -39,8 +39,8 @@ use super::{
     forwarder::RequestForwarder,
     hyper_client::ProxyResponse,
     providers::{
-        streaming_codex_anthropic, streaming_gemini, streaming_responses, transform,
-        transform_responses,
+        streaming, streaming_anthropic_chat, streaming_codex_anthropic, streaming_gemini,
+        streaming_responses, transform, transform_responses,
     },
     server::ProxyState,
     types::{CopilotOptimizerConfig, OptimizerConfig, RectifierConfig},
@@ -501,11 +501,10 @@ fn build_inbound_sse_stream(
                 None,
             ),
         ),
-        Some("openai_chat") => {
-            // 缺口：Chat→Anthropic SSE 暂无现成转换器。passthrough + warn。
-            log::warn!("[Gateway] Chat→Anthropic SSE 转换未实现，透传上游 SSE 流");
-            upstream
-        }
+        Some("openai_chat") => Box::pin(
+            // Chat SSE → Anthropic SSE（复用 Claude 客户端 + OpenAI 兼容上游的现成转换器）
+            streaming::create_anthropic_sse_stream(upstream),
+        ),
         Some(other) => {
             log::warn!("[Gateway] 未知上游协议 {other}，SSE 按 Anthropic 透传");
             upstream
@@ -519,11 +518,10 @@ fn build_inbound_sse_stream(
                 anthropic_stream,
             ),
         ),
-        InboundProtocol::OpenAiChat => {
-            // 缺口：Anthropic→Chat SSE 暂无现成转换器。passthrough + warn。
-            log::warn!("[Gateway] Anthropic→Chat SSE 转换未实现，透传上游 SSE 流");
-            anthropic_stream
-        }
+        InboundProtocol::OpenAiChat => Box::pin(
+            // Anthropic SSE → Chat SSE（网关新增转换器）
+            streaming_anthropic_chat::create_chat_sse_stream_from_anthropic(anthropic_stream),
+        ),
     };
 
     Ok(final_stream)

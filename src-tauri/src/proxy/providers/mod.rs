@@ -27,6 +27,7 @@ pub mod gemini_shadow;
 pub mod models;
 pub(crate) mod reasoning_bridge;
 pub mod streaming;
+pub mod streaming_anthropic_chat;
 pub mod streaming_codex_anthropic;
 pub mod streaming_codex_chat;
 pub mod streaming_gemini;
