@@ -45,6 +45,7 @@ import { DirectorySettings } from "@/components/settings/DirectorySettings";
 import { ImportExportSection } from "@/components/settings/ImportExportSection";
 import { BackupListSection } from "@/components/settings/BackupListSection";
 import { WebdavSyncSection } from "@/components/settings/WebdavSyncSection";
+import { ENABLE_CLOUD_SYNC } from "@/config/featureFlags";
 import { AboutSection } from "@/components/settings/AboutSection";
 import { ProxyTabContent } from "@/components/settings/ProxyTabContent";
 import { ConnectivityCheckConfigPanel } from "@/components/usage/ConnectivityCheckConfigPanel";
@@ -428,6 +429,7 @@ export function SettingsPage({
                         </AccordionContent>
                       </AccordionItem>
 
+                      {ENABLE_CLOUD_SYNC && (
                       <AccordionItem
                         value="cloudSync"
                         className="rounded-xl glass-card overflow-hidden"
@@ -454,6 +456,7 @@ export function SettingsPage({
                           />
                         </AccordionContent>
                       </AccordionItem>
+                      )}
 
                       <AccordionItem
                         value="connectivityCheck"
