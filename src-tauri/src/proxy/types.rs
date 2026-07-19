@@ -149,6 +149,11 @@ pub struct LiveBackup {
     pub original_config: String,
     /// 备份时间
     pub backed_up_at: String,
+    /// 原始 live 文件的 SHA256 hex（接管前算的）
+    ///
+    /// 迁移前的老数据为 `None`；`live_protection` 模块据此判断是否跳过校验。
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub original_hash: Option<String>,
 }
 
 /// 全局代理配置（统一字段，三行镜像）

@@ -342,6 +342,11 @@ impl ProxyService {
         &self,
         provider: &Provider,
     ) -> Result<(), String> {
+        // 同步前先校验：用户在备份后是否手动修改了 live 文件？若修改则拒绝覆盖。
+        crate::live_protection::check_user_modified(&self.db, "claude")
+            .await
+            .map_err(|e| e.to_string())?;
+
         let effective_provider = self.claude_provider_with_effective_settings(provider)?;
         let mut effective_settings = effective_provider.settings_config.clone();
         let (proxy_url, _) = self.build_proxy_urls().await?;
@@ -359,6 +364,11 @@ impl ProxyService {
         &self,
         provider: &Provider,
     ) -> Result<(), String> {
+        // 同步前先校验：用户在备份后是否手动修改了 live 文件？若修改则拒绝覆盖。
+        crate::live_protection::check_user_modified(&self.db, "codex")
+            .await
+            .map_err(|e| e.to_string())?;
+
         let existing_live = self.read_codex_live().ok();
         let mut effective_settings = build_effective_settings_with_common_config(
             self.db.as_ref(),
@@ -388,6 +398,11 @@ impl ProxyService {
         &self,
         provider: &Provider,
     ) -> Result<(), String> {
+        // 同步前先校验：用户在备份后是否手动修改了 live 文件？若修改则拒绝覆盖。
+        crate::live_protection::check_user_modified(&self.db, "grokbuild")
+            .await
+            .map_err(|e| e.to_string())?;
+
         let existing_live = self.read_grok_live().ok();
         let mut effective_settings = build_effective_settings_with_common_config(
             self.db.as_ref(),
@@ -445,8 +460,14 @@ impl ProxyService {
 
         let rollback_result = match previous_backup {
             Some(backup) => {
+                // 热切换 rollback：把上一次的 backup.original_config 原样写回。
+                // hash 也沿用上一次的值（避免破坏 live_protection 的对照基线）。
                 self.db
-                    .save_live_backup(app_type.as_str(), &backup.original_config)
+                    .save_live_backup(
+                        app_type.as_str(),
+                        &backup.original_config,
+                        backup.original_hash.as_deref(),
+                    )
                     .await
             }
             None => self.db.delete_live_backup(app_type.as_str()).await,
@@ -1381,8 +1402,12 @@ impl ProxyService {
             } else {
                 let json_str = serde_json::to_string(&config)
                     .map_err(|e| format!("序列化 Claude 配置失败: {e}"))?;
+                let hash =
+                    crate::live_protection::live_file_path("claude").and_then(|p| {
+                        crate::live_protection::compute_file_hash(&p)
+                    });
                 self.db
-                    .save_live_backup("claude", &json_str)
+                    .save_live_backup("claude", &json_str, hash.as_deref())
                     .await
                     .map_err(|e| format!("备份 Claude 配置失败: {e}"))?;
             }
@@ -1395,8 +1420,11 @@ impl ProxyService {
             } else {
                 let json_str = serde_json::to_string(&config)
                     .map_err(|e| format!("序列化 Codex 配置失败: {e}"))?;
+                let hash = crate::live_protection::live_file_path("codex").and_then(|p| {
+                    crate::live_protection::compute_file_hash(&p)
+                });
                 self.db
-                    .save_live_backup("codex", &json_str)
+                    .save_live_backup("codex", &json_str, hash.as_deref())
                     .await
                     .map_err(|e| format!("备份 Codex 配置失败: {e}"))?;
             }
@@ -1409,8 +1437,11 @@ impl ProxyService {
             } else {
                 let json_str = serde_json::to_string(&config)
                     .map_err(|e| format!("序列化 Gemini 配置失败: {e}"))?;
+                let hash = crate::live_protection::live_file_path("gemini").and_then(|p| {
+                    crate::live_protection::compute_file_hash(&p)
+                });
                 self.db
-                    .save_live_backup("gemini", &json_str)
+                    .save_live_backup("gemini", &json_str, hash.as_deref())
                     .await
                     .map_err(|e| format!("备份 Gemini 配置失败: {e}"))?;
             }
@@ -1423,8 +1454,12 @@ impl ProxyService {
             } else {
                 let json_str = serde_json::to_string(&config)
                     .map_err(|e| format!("序列化 Grok Build 配置失败: {e}"))?;
+                let hash =
+                    crate::live_protection::live_file_path("grokbuild").and_then(|p| {
+                        crate::live_protection::compute_file_hash(&p)
+                    });
                 self.db
-                    .save_live_backup("grokbuild", &json_str)
+                    .save_live_backup("grokbuild", &json_str, hash.as_deref())
                     .await
                     .map_err(|e| format!("备份 Grok Build 配置失败: {e}"))?;
             }
@@ -1455,8 +1490,11 @@ impl ProxyService {
 
         let json_str = serde_json::to_string(&config)
             .map_err(|e| format!("序列化 {app_type_str} 配置失败: {e}"))?;
+        let hash = crate::live_protection::live_file_path(app_type_str).and_then(|p| {
+            crate::live_protection::compute_file_hash(&p)
+        });
         self.db
-            .save_live_backup(app_type_str, &json_str)
+            .save_live_backup(app_type_str, &json_str, hash.as_deref())
             .await
             .map_err(|e| format!("备份 {app_type_str} 配置失败: {e}"))?;
 
@@ -1586,6 +1624,12 @@ impl ProxyService {
         let (proxy_url, proxy_codex_base_url) = self.build_proxy_urls().await?;
         let proxy_grok_base_url = format!("{}/grokbuild/v1", proxy_url.trim_end_matches('/'));
 
+        // 接管前先校验：用户在备份后是否手动修改了 live 文件？
+        // 若修改则拒绝覆盖，返回 AppError::LiveConfigModifiedByUser。
+        crate::live_protection::check_user_modified(&self.db, app_type.as_str())
+            .await
+            .map_err(|e| e.to_string())?;
+
         match app_type {
             AppType::Claude => {
                 let mut live_config = self.read_claude_live()?;
@@ -1644,6 +1688,11 @@ impl ProxyService {
     async fn takeover_live_config_best_effort(&self, app_type: &AppType) -> Result<(), String> {
         let (proxy_url, proxy_codex_base_url) = self.build_proxy_urls().await?;
         let proxy_grok_base_url = format!("{}/grokbuild/v1", proxy_url.trim_end_matches('/'));
+
+        // best-effort 也先校验用户修改（与 strict 一致；只覆盖行为可降级，写盘必须保护）
+        crate::live_protection::check_user_modified(&self.db, app_type.as_str())
+            .await
+            .map_err(|e| e.to_string())?;
 
         match app_type {
             AppType::Claude => {
@@ -2384,7 +2433,7 @@ impl ProxyService {
         };
 
         self.db
-            .save_live_backup(app_type, &backup_json)
+            .save_live_backup(app_type, &backup_json, None)
             .await
             .map_err(|e| format!("更新 {app_type} 备份失败: {e}"))?;
 
@@ -4588,6 +4637,7 @@ wire_api = "responses"
                 "config": original_deepseek_config
             }))
             .expect("serialize original backup"),
+            None,
         )
         .await
         .expect("seed original live backup");
@@ -5317,7 +5367,7 @@ model = "gpt-5.1-codex"
             .expect("set current provider");
 
         // 模拟"已接管"状态：存在 Live 备份（内容不重要，会被热切换更新）
-        db.save_live_backup("claude", "{\"env\":{}}")
+        db.save_live_backup("claude", "{\"env\":{}}", None)
             .await
             .expect("seed live backup");
 
@@ -5395,6 +5445,7 @@ model = "gpt-5.1-codex"
         db.save_live_backup(
             "claude",
             &serde_json::to_string(&provider_a.settings_config).expect("serialize provider a"),
+            None,
         )
         .await
         .expect("seed live backup");
@@ -5545,7 +5596,7 @@ model = "gpt-5.1-codex"
             .expect("set current provider");
         crate::settings::set_current_provider(&AppType::Claude, Some("a"))
             .expect("set local current provider");
-        db.save_live_backup("claude", "{\"env\":{}}")
+        db.save_live_backup("claude", "{\"env\":{}}", None)
             .await
             .expect("seed live backup");
 
@@ -5633,6 +5684,7 @@ model = "gpt-5.1-codex"
         db.save_live_backup(
             "claude",
             &serde_json::to_string(&provider_a.settings_config).expect("serialize provider a"),
+            None,
         )
         .await
         .expect("seed live backup");
@@ -5826,6 +5878,7 @@ args = ["echo-server"]
 "#
             }))
             .expect("serialize seed backup"),
+            None,
         )
         .await
         .expect("seed live backup");
@@ -5933,6 +5986,7 @@ requires_openai_auth = true
         db.save_live_backup(
             "codex",
             &serde_json::to_string(&provider_a.settings_config).expect("serialize provider a"),
+            None,
         )
         .await
         .expect("seed live backup");
@@ -6108,6 +6162,7 @@ requires_openai_auth = true
         db.save_live_backup(
             "codex",
             &serde_json::to_string(&provider_a.settings_config).expect("serialize provider a"),
+            None,
         )
         .await
         .expect("seed live backup");
@@ -6195,6 +6250,7 @@ command = "legacy-command"
 "#
             }))
             .expect("serialize seed backup"),
+            None,
         )
         .await
         .expect("seed live backup");
@@ -6364,6 +6420,7 @@ requires_openai_auth = true
         db.save_live_backup(
             "codex",
             &serde_json::to_string(&provider_a.settings_config).expect("serialize backup"),
+            None,
         )
         .await
         .expect("seed restored backup");
@@ -6500,6 +6557,7 @@ requires_openai_auth = true
         db.save_live_backup(
             "codex",
             &serde_json::to_string(&provider_a.settings_config).expect("serialize backup"),
+            None,
         )
         .await
         .expect("seed restored backup");
@@ -6574,6 +6632,7 @@ requires_openai_auth = true
         db.save_live_backup(
             "codex",
             &serde_json::to_string(&provider_a.settings_config).expect("serialize backup"),
+            None,
         )
         .await
         .expect("seed restored backup");
@@ -6664,7 +6723,7 @@ requires_openai_auth = true
             "config": backup_config,
         }))
         .expect("serialize backup");
-        db.save_live_backup("codex", &backup_json)
+        db.save_live_backup("codex", &backup_json, None)
             .await
             .expect("seed live backup");
 
@@ -6722,7 +6781,7 @@ requires_openai_auth = true
             }
         }))
         .expect("serialize backup");
-        db.save_live_backup("codex", &backup_json)
+        db.save_live_backup("codex", &backup_json, None)
             .await
             .expect("seed live backup");
 
@@ -6792,7 +6851,7 @@ requires_openai_auth = true
             }
         }))
         .expect("serialize backup");
-        db.save_live_backup("codex", &backup_json)
+        db.save_live_backup("codex", &backup_json, None)
             .await
             .expect("seed live backup");
 
@@ -6856,7 +6915,7 @@ requires_openai_auth = true
             }
         }))
         .expect("serialize corrupted backup");
-        db.save_live_backup("claude", &corrupted_backup)
+        db.save_live_backup("claude", &corrupted_backup, None)
             .await
             .expect("seed corrupted backup");
 
@@ -6938,7 +6997,7 @@ requires_openai_auth = true
             }
         }))
         .expect("serialize good backup");
-        db.save_live_backup("claude", &good_backup)
+        db.save_live_backup("claude", &good_backup, None)
             .await
             .expect("seed good backup");
 
@@ -6990,7 +7049,7 @@ requires_openai_auth = true
             }
         }))
         .expect("serialize good backup");
-        db.save_live_backup("claude", &good_backup)
+        db.save_live_backup("claude", &good_backup, None)
             .await
             .expect("seed claude backup");
 
@@ -6998,7 +7057,7 @@ requires_openai_auth = true
             "auth": { "OPENAI_API_KEY": "real-codex-token" }
         }))
         .expect("serialize codex good backup");
-        db.save_live_backup("codex", &codex_good_backup)
+        db.save_live_backup("codex", &codex_good_backup, None)
             .await
             .expect("seed codex backup");
 
@@ -7006,7 +7065,7 @@ requires_openai_auth = true
             "env": { "GEMINI_API_KEY": "real-gemini-key" }
         }))
         .expect("serialize gemini good backup");
-        db.save_live_backup("gemini", &gemini_good_backup)
+        db.save_live_backup("gemini", &gemini_good_backup, None)
             .await
             .expect("seed gemini backup");
 
@@ -7115,6 +7174,7 @@ experimental_bearer_token = "PROXY_MANAGED"
         db.save_live_backup(
             "grokbuild",
             &serde_json::to_string(&original_settings).expect("serialize backup"),
+            None,
         )
         .await
         .expect("seed backup");
@@ -7175,7 +7235,7 @@ experimental_bearer_token = "PROXY_MANAGED"
 
         let original_backup =
             serde_json::to_string(&provider_a.settings_config).expect("serialize backup");
-        db.save_live_backup("grokbuild", &original_backup)
+        db.save_live_backup("grokbuild", &original_backup, None)
             .await
             .expect("seed backup");
         let takeover = crate::grok_config::apply_proxy_takeover(

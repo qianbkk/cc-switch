@@ -776,22 +776,27 @@ impl Database {
     // ==================== Live Backup ====================
 
     /// 保存 Live 配置备份
+    ///
+    /// `original_hash` 为可选的 SHA256 摘要（对原始 live 文件计算），
+    /// 由 `live_protection` 模块写入；旧数据迁移时填空字符串。
     pub async fn save_live_backup(
         &self,
         app_type: &str,
         config_json: &str,
+        original_hash: Option<&str>,
     ) -> Result<(), AppError> {
         let conn = lock_conn!(self.conn);
         let now = chrono::Utc::now().to_rfc3339();
+        let hash = original_hash.unwrap_or("");
 
         conn.execute(
-            "INSERT OR REPLACE INTO proxy_live_backup (app_type, original_config, backed_up_at)
-             VALUES (?1, ?2, ?3)",
-            rusqlite::params![app_type, config_json, now],
+            "INSERT OR REPLACE INTO proxy_live_backup (app_type, original_config, original_hash, backed_up_at)
+             VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![app_type, config_json, hash, now],
         )
         .map_err(|e| AppError::Database(e.to_string()))?;
 
-        log::info!("已备份 {app_type} Live 配置");
+        log::info!("已备份 {app_type} Live 配置 (hash: {}…)", &hash[..hash.len().min(8)]);
         Ok(())
     }
 
@@ -807,17 +812,26 @@ impl Database {
     }
 
     /// 获取 Live 配置备份
+    ///
+    /// `original_hash` 在迁移前的旧数据上为 `None`，便于上层 `live_protection`
+    /// 跳过这些无 hash 的历史备份。
     pub async fn get_live_backup(&self, app_type: &str) -> Result<Option<LiveBackup>, AppError> {
         let conn = lock_conn!(self.conn);
 
         let result = conn.query_row(
-            "SELECT app_type, original_config, backed_up_at FROM proxy_live_backup WHERE app_type = ?1",
+            "SELECT app_type, original_config, backed_up_at,
+                    CASE WHEN original_hash IS NULL THEN '' ELSE original_hash END
+             FROM proxy_live_backup WHERE app_type = ?1",
             rusqlite::params![app_type],
             |row| {
                 Ok(LiveBackup {
                     app_type: row.get(0)?,
                     original_config: row.get(1)?,
                     backed_up_at: row.get(2)?,
+                    original_hash: {
+                        let s: String = row.get(3)?;
+                        if s.is_empty() { None } else { Some(s) }
+                    },
                 })
             },
         );

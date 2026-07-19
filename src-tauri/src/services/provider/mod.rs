@@ -1167,6 +1167,7 @@ requires_openai_auth = true
         db.save_live_backup(
             "codex",
             &serde_json::to_string(&original.settings_config).expect("serialize backup"),
+            None,
         )
         .await
         .expect("seed live backup");
@@ -1280,7 +1281,7 @@ requires_openai_auth = true
 
         // Claude Desktop keeps backup state from takeover startup; this sentinel only
         // marks takeover as active so provider updates rewrite the 3P profile.
-        db.save_live_backup("claude-desktop", "{}")
+        db.save_live_backup("claude-desktop", "{}", None)
             .await
             .expect("seed live backup");
         {

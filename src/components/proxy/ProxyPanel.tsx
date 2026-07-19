@@ -25,6 +25,8 @@ import {
   useSetProxyTakeoverForApp,
   useGlobalProxyConfig,
   useUpdateGlobalProxyConfig,
+  useProtectUserLiveEdits,
+  useSetProtectUserLiveEdits,
 } from "@/lib/query/proxy";
 import type { ProxyStatus } from "@/types/proxy";
 import { useTranslation } from "react-i18next";
@@ -53,6 +55,10 @@ export function ProxyPanel({
   // 获取全局代理配置
   const { data: globalConfig } = useGlobalProxyConfig();
   const updateGlobalConfig = useUpdateGlobalProxyConfig();
+
+  // Live 配置保护开关
+  const { data: protectEnabled } = useProtectUserLiveEdits();
+  const setProtectEnabled = useSetProtectUserLiveEdits();
 
   // 监听地址/端口的本地状态（端口用字符串以支持完全清空）
   const [listenAddress, setListenAddress] = useState("127.0.0.1");
@@ -92,6 +98,25 @@ export function ProxyPanel({
       const detail =
         extractErrorMessage(error) ||
         t("common.unknown", { defaultValue: "未知错误" });
+      // live_protection 抛出的 LiveConfigModifiedByUser 在 Rust 端的 Display
+      // 形如 "用户已修改 {app_type} 的 live 配置文件 (...)..."；前端用前缀判断
+      // 弹专用 toast 引导用户去关闭保护开关。两侧文案都覆盖，方便 i18n 兜底。
+      const lower = detail.toLowerCase();
+      const isModifiedByUser =
+        detail.startsWith("用户已修改") ||
+        detail.startsWith("User has modified") ||
+        lower.includes("live config") ||
+        lower.includes("refusing to overwrite");
+      if (isModifiedByUser) {
+        toast.error(
+          t("proxy.takeover.protect.modifiedToast", {
+            app: appType,
+            defaultValue: `${appType} live 配置已被手动修改；已拒绝覆盖。如需强制接管，请先关闭保护开关。`,
+          }),
+          { duration: 8000, closeButton: true },
+        );
+        return;
+      }
       toast.error(
         t("proxy.takeover.failed", {
           detail,
@@ -308,6 +333,29 @@ export function ProxyPanel({
                 "选择要经 CC Switch 代理的应用，启用后该应用的请求将通过本地代理转发；未勾选的直接走原配置。",
             })}
           </p>
+          {/* Live 配置保护开关：紧贴现有接管区域下方 */}
+          <div className="flex items-center justify-between rounded-md border border-primary/20 bg-background/60 px-3 py-2">
+            <div className="space-y-0.5 pr-3">
+              <Label className="text-sm font-medium">
+                {t("proxy.takeover.protect.title", {
+                  defaultValue: "保护用户手动修改的 live 配置",
+                })}
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                {t("proxy.takeover.protect.description", {
+                  defaultValue:
+                    "接管后，若你手动修改了 Claude/Codex/Gemini/Grok Build 的 live 配置文件，则拒绝覆盖。",
+                })}
+              </p>
+            </div>
+            <Switch
+              checked={protectEnabled ?? true}
+              onCheckedChange={(checked) =>
+                setProtectEnabled.mutate(checked)
+              }
+              disabled={setProtectEnabled.isPending}
+            />
+          </div>
         </div>
 
         {/* Running state: service info + stats */}

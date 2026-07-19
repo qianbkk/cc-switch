@@ -18,6 +18,7 @@ mod grok_config;
 pub mod hermes_config;
 mod init_status;
 mod lightweight;
+mod live_protection;
 #[cfg(target_os = "linux")]
 mod linux_fix;
 mod mcp;
@@ -1392,6 +1393,9 @@ pub fn run() {
             commands::set_pricing_model_source,
             commands::is_proxy_running,
             commands::is_live_takeover_active,
+            // Live 配置保护开关
+            commands::get_protect_user_live_edits,
+            commands::set_protect_user_live_edits,
             commands::switch_proxy_provider,
             // Proxy failover commands
             commands::get_provider_health,

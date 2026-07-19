@@ -59,6 +59,18 @@ export const proxyApi = {
     return invoke("set_proxy_takeover_for_app", { appType, enabled });
   },
 
+  // ========== Live 配置保护 API ==========
+
+  // 获取"保护用户手动修改的 live 配置"开关状态（缺省视为开启）
+  async getProtectUserLiveEdits(): Promise<boolean> {
+    return invoke("get_protect_user_live_edits");
+  },
+
+  // 设置"保护用户手动修改的 live 配置"开关状态
+  async setProtectUserLiveEdits(enabled: boolean): Promise<void> {
+    return invoke("set_protect_user_live_edits", { enabled });
+  },
+
   // ========== Legacy 代理配置 API (兼容) ==========
 
   // 获取代理配置（旧版 v2 兼容接口）

@@ -2644,6 +2644,13 @@
         "active": "{{appLabel}} 路由中 - {{address}}:{{port}}\n切換該應用程式供應商為熱切換",
         "broken": "{{appLabel}} 路由中，但路由服務未執行",
         "inactive": "路由 {{appLabel}} 的請求，讓該應用程式請求走本地路由"
+      },
+      "protect": {
+        "title": "保護使用者手動修改的 live 設定",
+        "description": "接管後，若使用者手動修改了 Claude/Codex/Gemini/Grok Build 的 live 設定檔，則拒絕覆寫。僅在你想讓 CC Switch 始終覆寫時再關閉。",
+        "enabled": "Live 設定保護已開啟",
+        "disabled": "Live 設定保護已關閉（手動修改將被覆寫）",
+        "modifiedToast": "{{app}} live 設定已被手動修改；已拒絕覆寫。如需強制接管，請先關閉保護開關。"
       }
     },
     "failover": {

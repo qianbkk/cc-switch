@@ -263,7 +263,8 @@ impl Database {
         // 16. Proxy Live Backup 表 (Live 配置备份)
         conn.execute(
             "CREATE TABLE IF NOT EXISTS proxy_live_backup (
-            app_type TEXT PRIMARY KEY, original_config TEXT NOT NULL, backed_up_at TEXT NOT NULL
+            app_type TEXT PRIMARY KEY, original_config TEXT NOT NULL, backed_up_at TEXT NOT NULL,
+            original_hash TEXT NOT NULL DEFAULT ''
         )",
             [],
         )
@@ -505,6 +506,11 @@ impl Database {
                         log::info!("迁移数据库从 v14 到 v15（Skills/MCP 添加 Grok Build 支持）");
                         Self::migrate_v14_to_v15(conn)?;
                         Self::set_user_version(conn, 15)?;
+                    }
+                    15 => {
+                        log::info!("迁移数据库从 v15 到 v16（proxy_live_backup 添加 original_hash 列，保护用户手动修改）");
+                        Self::migrate_v15_to_v16(conn)?;
+                        Self::set_user_version(conn, 16)?;
                     }
                     _ => {
                         return Err(AppError::Database(format!(
@@ -1507,6 +1513,23 @@ impl Database {
                 "BOOLEAN NOT NULL DEFAULT 0",
             )?;
         }
+        Ok(())
+    }
+
+    /// v15 -> v16: 为 proxy_live_backup 添加 original_hash 列（用户手动修改保护）
+    ///
+    /// 旧数据填 ''（空字符串），`live_protection` 会据此跳过校验。
+    /// 后续接管时会按需回填该应用的 live 文件 SHA256。
+    fn migrate_v15_to_v16(conn: &Connection) -> Result<(), AppError> {
+        if Self::table_exists(conn, "proxy_live_backup")? {
+            Self::add_column_if_missing(
+                conn,
+                "proxy_live_backup",
+                "original_hash",
+                "TEXT NOT NULL DEFAULT ''",
+            )?;
+        }
+        log::info!("v15 -> v16 迁移完成：proxy_live_backup 已支持 original_hash");
         Ok(())
     }
 
@@ -3018,6 +3041,50 @@ mod tests {
         )?;
         assert_eq!(mcp_values, (1, 0));
         assert_eq!(skill_values, (1, 0));
+
+        Ok(())
+    }
+
+    #[test]
+    fn migrate_v15_to_v16_adds_proxy_live_backup_original_hash_column() -> Result<(), AppError> {
+        let conn = Connection::open_in_memory()?;
+        conn.execute(
+            "CREATE TABLE proxy_live_backup (
+                app_type TEXT PRIMARY KEY,
+                original_config TEXT NOT NULL,
+                backed_up_at TEXT NOT NULL
+            )",
+            [],
+        )?;
+        conn.execute(
+            "INSERT INTO proxy_live_backup (app_type, original_config, backed_up_at)
+             VALUES ('claude', '{}', '2026-01-01T00:00:00Z')",
+            [],
+        )?;
+        Database::set_user_version(&conn, 15)?;
+
+        Database::apply_schema_migrations_on_conn(&conn)?;
+
+        assert_eq!(Database::get_user_version(&conn)?, SCHEMA_VERSION);
+        assert!(Database::has_column(
+            &conn,
+            "proxy_live_backup",
+            "original_hash"
+        )?);
+        // 旧数据应填空字符串
+        let original_hash: String = conn.query_row(
+            "SELECT original_hash FROM proxy_live_backup WHERE app_type = 'claude'",
+            [],
+            |row| row.get(0),
+        )?;
+        assert_eq!(original_hash, "");
+        // 原始内容应保留
+        let original_config: String = conn.query_row(
+            "SELECT original_config FROM proxy_live_backup WHERE app_type = 'claude'",
+            [],
+            |row| row.get(0),
+        )?;
+        assert_eq!(original_config, "{}");
 
         Ok(())
     }

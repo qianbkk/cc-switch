@@ -2672,6 +2672,13 @@
         "active": "{{appLabel}} がルーティング中 - {{address}}:{{port}}\nホットスイッチングのためプロバイダを切り替え",
         "broken": "{{appLabel}} がルーティング中ですが、ルーティングサービスが実行されていません",
         "inactive": "{{appLabel}} のリクエストをローカルルーティング経由でルーティング"
+      },
+      "protect": {
+        "title": "手動編集された live 設定を保護",
+        "description": "接管後にユーザーが Claude/Codex/Gemini/Grok Build の live 設定ファイルを手動編集していた場合、上書きしません。CC Switch に常に上書きさせたい場合のみ無効化してください。",
+        "enabled": "Live 設定保護を有効化しました",
+        "disabled": "Live 設定保護を無効化しました（手動編集は上書きされます）",
+        "modifiedToast": "{{app}} live 設定が手動編集されています；上書きを拒否しました。強制的に接管するには保護スイッチをオフにしてください。"
       }
     },
     "failover": {

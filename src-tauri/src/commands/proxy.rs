@@ -268,6 +268,31 @@ pub async fn is_proxy_running(state: tauri::State<'_, AppState>) -> Result<bool,
     Ok(state.proxy_service.is_running().await)
 }
 
+/// 获取"是否保护用户手动修改的 live 配置"开关状态
+///
+/// 缺省视为开启。详见 `live_protection` 模块。
+#[tauri::command]
+pub async fn get_protect_user_live_edits(
+    state: tauri::State<'_, AppState>,
+) -> Result<bool, String> {
+    Ok(crate::live_protection::get_protect_user_live_edits(
+        state.db.as_ref(),
+    ))
+}
+
+/// 设置"是否保护用户手动修改的 live 配置"开关状态
+///
+/// 关闭后，所有 live 写盘入口（接管、同步、热切换）都不再校验 hash，
+/// 会直接覆盖用户的 live 修改。
+#[tauri::command]
+pub async fn set_protect_user_live_edits(
+    state: tauri::State<'_, AppState>,
+    enabled: bool,
+) -> Result<(), String> {
+    crate::live_protection::set_protect_user_live_edits(state.db.as_ref(), enabled)
+        .map_err(|e| e.to_string())
+}
+
 /// 检查是否处于 Live 接管模式
 #[tauri::command]
 pub async fn is_live_takeover_active(state: tauri::State<'_, AppState>) -> Result<bool, String> {

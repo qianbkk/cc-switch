@@ -2672,6 +2672,13 @@
         "active": "{{appLabel}} is routing - {{address}}:{{port}}\nSwitch provider for hot switching",
         "broken": "{{appLabel}} is routing, but routing service is not running",
         "inactive": "Route {{appLabel}}'s requests through local routing"
+      },
+      "protect": {
+        "title": "Protect manually edited live configs",
+        "description": "Refuse to overwrite Claude/Codex/Gemini/Grok Build live configs that you've manually edited since takeover. Disable only if you want CC Switch to always overwrite.",
+        "enabled": "Live config protection enabled",
+        "disabled": "Live config protection disabled (manual edits will be overwritten)",
+        "modifiedToast": "{{app}} live config was manually modified; takeover refused to overwrite. Disable protection to force overwrite."
       }
     },
     "failover": {

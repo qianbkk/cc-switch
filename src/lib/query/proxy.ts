@@ -202,6 +202,45 @@ export function useUpdateGlobalProxyConfig() {
 }
 
 /**
+ * 获取"保护用户手动修改的 live 配置"开关状态
+ */
+export function useProtectUserLiveEdits() {
+  return useQuery({
+    queryKey: ["protectUserLiveEdits"],
+    queryFn: () => proxyApi.getProtectUserLiveEdits(),
+  });
+}
+
+/**
+ * 设置"保护用户手动修改的 live 配置"开关状态
+ */
+export function useSetProtectUserLiveEdits() {
+  const queryClient = useQueryClient();
+  const { t } = useTranslation();
+
+  return useMutation({
+    mutationFn: (enabled: boolean) =>
+      proxyApi.setProtectUserLiveEdits(enabled),
+    onSuccess: (_data, enabled) => {
+      toast.success(
+        enabled
+          ? t("proxy.takeover.protect.enabled", {
+              defaultValue: "Live 配置保护已开启",
+            })
+          : t("proxy.takeover.protect.disabled", {
+              defaultValue: "Live 配置保护已关闭",
+            }),
+        { closeButton: true },
+      );
+      queryClient.invalidateQueries({ queryKey: ["protectUserLiveEdits"] });
+    },
+    onError: () => {
+      // 不强提示，保留原值；下次保存仍会重试。
+    },
+  });
+}
+
+/**
  * 获取指定应用的代理配置
  */
 export function useAppProxyConfig(appType: string) {
