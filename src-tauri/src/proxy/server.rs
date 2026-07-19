@@ -10,6 +10,7 @@
 
 use super::{
     failover_switch::FailoverSwitchManager,
+    gateway,
     handlers,
     log_codes::srv as log_srv,
     provider_router::ProviderRouter,
@@ -364,6 +365,20 @@ impl ProxyServer {
             .route("/gemini/v1beta/*path", any(handlers::handle_gemini))
             // Gemini 的 GA 版本也叫 /v1，给原 SDK 留一条出口
             .route("/gemini/v1/*path", any(handlers::handle_gemini))
+            // 统一网关（custom 功能）：挂载在 /gateway/* 前缀避免与现有 /v1/* 冲突
+            .route(
+                "/gateway/v1/messages",
+                post(gateway::handle_gateway_messages),
+            )
+            .route(
+                "/gateway/v1/chat/completions",
+                post(gateway::handle_gateway_chat_completions),
+            )
+            .route(
+                "/gateway/v1/responses",
+                post(gateway::handle_gateway_responses),
+            )
+            .route("/gateway/v1/models", get(gateway::handle_gateway_models))
             // 提高默认请求体大小限制（避免 413 Payload Too Large）
             .layer(DefaultBodyLimit::max(200 * 1024 * 1024))
             .with_state(self.state.clone())

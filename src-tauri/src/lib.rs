@@ -1067,6 +1067,9 @@ pub fn run() {
                 // 检查 settings 表中的代理状态，自动恢复代理服务
                 restore_proxy_state_on_startup(&state).await;
 
+                // 统一网关启动恢复：若 gateway_config.enabled 且代理未运行则启动
+                commands::gateway::ensure_gateway_started_on_startup(&state).await;
+
                 // Periodic backup check (on startup)
                 if let Err(e) = state.db.periodic_backup_if_needed() {
                     log::warn!("Periodic backup failed on startup: {e}");
@@ -1522,6 +1525,10 @@ pub fn run() {
             commands::enter_lightweight_mode,
             commands::exit_lightweight_mode,
             commands::is_lightweight_mode,
+            // 统一网关设置 commands
+            commands::get_gateway_config,
+            commands::save_gateway_config,
+            commands::regenerate_gateway_key,
         ]);
 
     let app = builder

@@ -9,6 +9,8 @@ mod copilot;
 mod deeplink;
 mod env;
 mod failover;
+pub mod gateway;
+pub use gateway::*;
 mod global_proxy;
 mod hermes;
 mod import_export;
