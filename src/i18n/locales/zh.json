@@ -40,7 +40,9 @@
     "deleting": "删除中...",
     "auto": "自动",
     "enabled": "已开启",
-    "notSet": "未设置"
+    "notSet": "未设置",
+    "copied": "已复制",
+    "saved": "已保存"
   },
   "firstRunNotice": {
     "title": "欢迎使用 CC Switch",
@@ -418,6 +420,83 @@
           "debug": "详细信息，包含 SSE 流和请求/响应详情",
           "trace": "全部日志，最详细"
         }
+      },
+      "gateway": {
+        "title": "统一网关",
+        "description": "通过一个 OpenAI 兼容端点和单一 API Key 对外暴露所有已配置的供应商。",
+        "enabled": "启用网关",
+        "enabledDescription": "保存即生效。需要代理服务器运行，后端会自动启动。",
+        "enabledToast": "统一网关已启用",
+        "disabledToast": "统一网关已禁用",
+        "baseUrl": "Base URL",
+        "endpointsHint": "支持三种端点：/v1/messages、/v1/chat/completions、/v1/responses",
+        "apiKey": "API Key",
+        "keyRegenerated": "已生成新的 API Key",
+        "regenConfirmTitle": "重新生成 API Key？",
+        "regenConfirmMessage": "旧 Key 将立即失效。所有使用旧 Key 的客户端都需要更新为新 Key。",
+        "regenConfirmButton": "重新生成",
+        "modelPool": "模型池",
+        "modelPoolDescription": "为每个供应商勾选要通过网关暴露的模型。点击保存以持久化。",
+        "fetchModels": "拉取模型",
+        "noModelsFound": "未获取到模型",
+        "manualModelPlaceholder": "输入模型名添加",
+        "selectedModels": "已选模型",
+        "curlExample": "curl 示例",
+        "loadFailed": "无法加载网关配置"
+      },
+      "copilotOptimizer": {
+        "title": "Copilot 请求优化",
+        "description": "通过优化代理请求，缓解 Copilot 配额异常消耗问题。",
+        "fields": {
+          "enabled": {
+            "label": "启用优化器",
+            "description": "以下所有 Copilot 请求优化项的总开关。"
+          },
+          "requestClassification": {
+            "label": "请求分类",
+            "description": "设置 x-initiator，使预热与后台请求不被计为 premium 交互。"
+          },
+          "toolResultMerging": {
+            "label": "Tool Result 合并",
+            "description": "合并连续的 tool-result 消息，减少请求数与 token 消耗。"
+          },
+          "compactDetection": {
+            "label": "Compact 请求识别",
+            "description": "识别对话压缩（compact）请求并正确分类。"
+          },
+          "deterministicRequestId": {
+            "label": "确定性 Request ID",
+            "description": "同一会话复用稳定的 request ID，避免重试被重复计费。"
+          },
+          "subagentDetection": {
+            "label": "Subagent 检测",
+            "description": "识别 Claude Code 子代理请求并标记，避免额外计费。"
+          },
+          "warmupDowngrade": {
+            "label": "Warmup 模型降级",
+            "description": "将预热探针请求路由到小模型，避免消耗 premium 配额。"
+          },
+          "stripThinking": {
+            "label": "剥离 Thinking 块",
+            "description": "发送前移除 thinking / redacted_thinking 块，避免被拒后触发重试。"
+          },
+          "warmupModel": {
+            "label": "Warmup 模型",
+            "description": "降级预热请求所使用的小模型。"
+          }
+        }
+      },
+      "claudePlugin": {
+        "title": "Claude 插件状态",
+        "description": "查看 Claude config.json 路径与登录向导跳过标记。",
+        "configPath": "config.json 路径",
+        "skipFlag": "登录向导跳过标记",
+        "skipFlagDescription": "是否已写入跳过 Claude 登录向导的标记。",
+        "applied": "已写入",
+        "notApplied": "未写入",
+        "viewConfig": "查看原文",
+        "viewConfigTitle": "Claude config.json",
+        "noConfig": "配置文件不存在或为空。"
       }
     },
     "language": "界面语言",
@@ -870,7 +949,15 @@
       "defaultCostMultiplierRequired": "默认倍率不能为空",
       "defaultCostMultiplierInvalid": "默认倍率格式不正确"
     },
-    "saveFailedGeneric": "保存失败，请重试"
+    "saveFailedGeneric": "保存失败，请重试",
+    "lightweight": {
+      "title": "轻量模式",
+      "description": "关闭主窗口，仅保留托盘图标以节省资源。可随时从系统托盘恢复。",
+      "enter": "进入轻量模式",
+      "confirmTitle": "进入轻量模式？",
+      "confirmMessage": "主窗口将关闭，应用将继续在系统托盘中运行。你可以随时从托盘图标恢复窗口。",
+      "confirmButton": "进入"
+    }
   },
   "apps": {
     "claude": "Claude",

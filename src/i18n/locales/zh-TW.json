@@ -40,7 +40,9 @@
     "deleting": "刪除中...",
     "auto": "自動",
     "enabled": "已啟用",
-    "notSet": "未設定"
+    "notSet": "未設定",
+    "copied": "Copied",
+    "saved": "Saved"
   },
   "firstRunNotice": {
     "title": "歡迎使用 CC Switch",
@@ -418,6 +420,83 @@
           "debug": "詳細資訊，包含 SSE 串流與請求/回應詳情",
           "trace": "全部日誌，最詳細"
         }
+      },
+      "gateway": {
+        "title": "Unified Gateway",
+        "description": "Expose all configured providers through one OpenAI-compatible endpoint with a single API key.",
+        "enabled": "Enable Gateway",
+        "enabledDescription": "Takes effect immediately. Requires the proxy server to be running; it will start automatically.",
+        "enabledToast": "Unified gateway enabled",
+        "disabledToast": "Unified gateway disabled",
+        "baseUrl": "Base URL",
+        "endpointsHint": "Supported endpoints: /v1/messages, /v1/chat/completions, /v1/responses",
+        "apiKey": "API Key",
+        "keyRegenerated": "New API key generated",
+        "regenConfirmTitle": "Regenerate API Key?",
+        "regenConfirmMessage": "The old key will stop working immediately. Any client using it must be updated with the new key.",
+        "regenConfirmButton": "Regenerate",
+        "modelPool": "Model Pool",
+        "modelPoolDescription": "Pick the models each provider exposes through the gateway. Save to persist changes.",
+        "fetchModels": "Fetch Models",
+        "noModelsFound": "No models returned",
+        "manualModelPlaceholder": "Enter model name to add",
+        "selectedModels": "Selected Models",
+        "curlExample": "curl Example",
+        "loadFailed": "Failed to load gateway configuration"
+      },
+      "copilotOptimizer": {
+        "title": "Copilot Request Optimization",
+        "description": "Reduce abnormal Copilot quota usage by optimizing proxied requests.",
+        "fields": {
+          "enabled": {
+            "label": "Enable Optimizer",
+            "description": "Master switch for all Copilot request optimizations below."
+          },
+          "requestClassification": {
+            "label": "Request Classification",
+            "description": "Set x-initiator so warmup and background requests are not billed as premium interactions."
+          },
+          "toolResultMerging": {
+            "label": "Tool Result Merging",
+            "description": "Merge consecutive tool-result messages to reduce request count and token usage."
+          },
+          "compactDetection": {
+            "label": "Compact Request Detection",
+            "description": "Detect conversation compaction requests and classify them correctly."
+          },
+          "deterministicRequestId": {
+            "label": "Deterministic Request ID",
+            "description": "Reuse a stable request ID per session so retries are not double-counted."
+          },
+          "subagentDetection": {
+            "label": "Subagent Detection",
+            "description": "Detect Claude Code subagent requests and mark them to avoid extra billing."
+          },
+          "warmupDowngrade": {
+            "label": "Warmup Model Downgrade",
+            "description": "Route warmup probe requests to a small model to avoid consuming premium quota."
+          },
+          "stripThinking": {
+            "label": "Strip Thinking Blocks",
+            "description": "Remove thinking / redacted_thinking blocks before sending to avoid rejected retries."
+          },
+          "warmupModel": {
+            "label": "Warmup Model",
+            "description": "Small model used for downgraded warmup requests."
+          }
+        }
+      },
+      "claudePlugin": {
+        "title": "Claude Plugin Status",
+        "description": "View the Claude config.json path and the login-wizard skip marker.",
+        "configPath": "config.json Path",
+        "skipFlag": "Login Wizard Skip Marker",
+        "skipFlagDescription": "Whether the marker that skips the Claude login wizard has been written.",
+        "applied": "Applied",
+        "notApplied": "Not Applied",
+        "viewConfig": "View Config",
+        "viewConfigTitle": "Claude config.json",
+        "noConfig": "Config file does not exist or is empty."
       }
     },
     "language": "介面語言",
@@ -841,7 +920,15 @@
       "defaultCostMultiplierRequired": "預設倍率不能為空",
       "defaultCostMultiplierInvalid": "預設倍率格式不正確"
     },
-    "saveFailedGeneric": "儲存失敗，請重試"
+    "saveFailedGeneric": "儲存失敗，請重試",
+    "lightweight": {
+      "title": "Lightweight Mode",
+      "description": "Close the main window and keep only the tray icon to save resources. Restore anytime from the system tray.",
+      "enter": "Enter Lightweight Mode",
+      "confirmTitle": "Enter Lightweight Mode?",
+      "confirmMessage": "The main window will close and the app will keep running in the system tray. You can restore the window anytime from the tray icon.",
+      "confirmButton": "Enter"
+    }
   },
   "apps": {
     "claude": "Claude",

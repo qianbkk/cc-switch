@@ -16,6 +16,9 @@ import {
   ScrollText,
   HardDriveDownload,
   FlaskConical,
+  Network,
+  Gauge,
+  Puzzle,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -51,6 +54,10 @@ import { ProxyTabContent } from "@/components/settings/ProxyTabContent";
 import { ConnectivityCheckConfigPanel } from "@/components/usage/ConnectivityCheckConfigPanel";
 import { UsageDashboard } from "@/components/usage/UsageDashboard";
 import { LogConfigPanel } from "@/components/settings/LogConfigPanel";
+import { GatewaySettingsPanel } from "@/components/settings/GatewaySettingsPanel";
+import { CopilotOptimizerPanel } from "@/components/settings/CopilotOptimizerPanel";
+import { ClaudePluginStatusPanel } from "@/components/settings/ClaudePluginStatusPanel";
+import { LightweightModeSettings } from "@/components/settings/LightweightModeSettings";
 import { AuthCenterPanel } from "@/components/settings/AuthCenterPanel";
 import { CodexAuthSettings } from "@/components/settings/CodexAuthSettings";
 import { useInstalledSkills } from "@/hooks/useSkills";
@@ -289,6 +296,7 @@ export function SettingsPage({
                         handleAutoSave({ preferredTerminal: terminal })
                       }
                     />
+                    <LightweightModeSettings />
                   </motion.div>
                 ) : null}
               </TabsContent>
@@ -326,6 +334,74 @@ export function SettingsPage({
                       defaultValue={[]}
                       className="w-full space-y-4"
                     >
+                      <AccordionItem
+                        value="gateway"
+                        className="rounded-xl glass-card overflow-hidden"
+                      >
+                        <AccordionTrigger className="px-6 py-4 hover:no-underline hover:bg-muted/50 data-[state=open]:bg-muted/50">
+                          <div className="flex items-center gap-3">
+                            <Network className="h-5 w-5 text-violet-500" />
+                            <div className="text-left">
+                              <h3 className="text-base font-semibold">
+                                {t("settings.advanced.gateway.title")}
+                              </h3>
+                              <p className="text-sm text-muted-foreground font-normal">
+                                {t("settings.advanced.gateway.description")}
+                              </p>
+                            </div>
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent className="px-6 pb-6 pt-4 border-t border-border/50">
+                          <GatewaySettingsPanel />
+                        </AccordionContent>
+                      </AccordionItem>
+
+                      <AccordionItem
+                        value="copilotOptimizer"
+                        className="rounded-xl glass-card overflow-hidden"
+                      >
+                        <AccordionTrigger className="px-6 py-4 hover:no-underline hover:bg-muted/50 data-[state=open]:bg-muted/50">
+                          <div className="flex items-center gap-3">
+                            <Gauge className="h-5 w-5 text-pink-500" />
+                            <div className="text-left">
+                              <h3 className="text-base font-semibold">
+                                {t("settings.advanced.copilotOptimizer.title")}
+                              </h3>
+                              <p className="text-sm text-muted-foreground font-normal">
+                                {t(
+                                  "settings.advanced.copilotOptimizer.description",
+                                )}
+                              </p>
+                            </div>
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent className="px-6 pb-6 pt-4 border-t border-border/50">
+                          <CopilotOptimizerPanel />
+                        </AccordionContent>
+                      </AccordionItem>
+
+                      <AccordionItem
+                        value="claudePlugin"
+                        className="rounded-xl glass-card overflow-hidden"
+                      >
+                        <AccordionTrigger className="px-6 py-4 hover:no-underline hover:bg-muted/50 data-[state=open]:bg-muted/50">
+                          <div className="flex items-center gap-3">
+                            <Puzzle className="h-5 w-5 text-teal-500" />
+                            <div className="text-left">
+                              <h3 className="text-base font-semibold">
+                                {t("settings.advanced.claudePlugin.title")}
+                              </h3>
+                              <p className="text-sm text-muted-foreground font-normal">
+                                {t("settings.advanced.claudePlugin.description")}
+                              </p>
+                            </div>
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent className="px-6 pb-6 pt-4 border-t border-border/50">
+                          <ClaudePluginStatusPanel />
+                        </AccordionContent>
+                      </AccordionItem>
+
                       <AccordionItem
                         value="directory"
                         className="rounded-xl glass-card overflow-hidden"
