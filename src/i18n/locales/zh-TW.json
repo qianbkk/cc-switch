@@ -2635,7 +2635,8 @@
     },
     "switchFailed": "切換失敗：{{error}}",
     "takeover": {
-      "hint": "選擇要路由的應用程式，啟用後該應用程式的請求將透過本地路由轉發",
+      "hint": "選擇要透過 CC Switch 代理的應用程式，啟用後請求會走本地代理；未勾選的則直接使用原始設定。",
+      "proxyStoppedHint": "啟動代理服務後生效",
       "enabled": "{{app}} 路由已啟用",
       "disabled": "{{app}} 路由已關閉",
       "failed": "切換路由狀態失敗：{{detail}}",
@@ -2732,7 +2733,7 @@
   },
   "proxyConfig": {
     "proxyEnabled": "路由總開關",
-    "appTakeover": "路由啟用",
+    "appTakeover": "應用程式代理",
     "perAppConfig": "應用程式設定",
     "circuitBreaker": "斷路器設定",
     "circuitBreakerSettings": "斷路器設定",

@@ -28,7 +28,6 @@ import {
 } from "@/lib/query/proxy";
 import type { ProxyStatus } from "@/types/proxy";
 import { useTranslation } from "react-i18next";
-import { AnimatePresence, motion } from "framer-motion";
 import { extractErrorMessage } from "@/utils/errorUtils";
 
 interface ProxyPanelProps {
@@ -257,59 +256,59 @@ export function ProxyPanel({
           />
         </div>
 
-        {/* [3] App takeover switches — animated, visible only when proxy is running */}
-        <AnimatePresence>
-          {isRunning && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.25, ease: "easeInOut" }}
-              className="overflow-hidden"
-            >
-              <div className="rounded-xl border-2 border-primary/20 bg-primary/5 p-4 space-y-3">
-                <p className="text-xs font-medium text-primary">
-                  {t("proxyConfig.appTakeover", {
-                    defaultValue: "应用接管",
-                  })}
-                </p>
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                  {(["claude", "codex", "gemini", "grokbuild"] as const).map(
-                    (appType) => {
-                      const isEnabled =
-                        takeoverStatus?.[
-                          appType as keyof typeof takeoverStatus
-                        ] ?? false;
-                      return (
-                        <div
-                          key={appType}
-                          className="flex items-center justify-between rounded-md border border-primary/20 bg-background/60 px-3 py-2"
-                        >
-                          <span className="text-sm font-medium capitalize">
-                            {appType === "grokbuild" ? "Grok Build" : appType}
-                          </span>
-                          <Switch
-                            checked={isEnabled}
-                            onCheckedChange={(checked) =>
-                              handleTakeoverChange(appType, checked)
-                            }
-                            disabled={setTakeoverForApp.isPending}
-                          />
-                        </div>
-                      );
-                    },
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {t("proxy.takeover.hint", {
-                    defaultValue:
-                      "选择要接管的应用，启用后该应用的请求将通过本地代理转发",
-                  })}
-                </p>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* [3] Per-app CC Switch proxy toggle — always visible, disabled when proxy stopped */}
+        <div className="rounded-xl border-2 border-primary/20 bg-primary/5 p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-medium text-primary">
+              {t("proxyConfig.appTakeover", {
+                defaultValue: "应用代理",
+              })}
+            </p>
+            {!isRunning && (
+              <span className="text-xs text-muted-foreground">
+                {t("proxy.takeover.proxyStoppedHint", {
+                  defaultValue: "启动代理服务后生效",
+                })}
+              </span>
+            )}
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            {(["claude", "codex", "gemini", "grokbuild"] as const).map(
+              (appType) => {
+                const isEnabled =
+                  takeoverStatus?.[
+                    appType as keyof typeof takeoverStatus
+                  ] ?? false;
+                return (
+                  <div
+                    key={appType}
+                    className="flex items-center justify-between rounded-md border border-primary/20 bg-background/60 px-3 py-2"
+                  >
+                    <span className="text-sm font-medium capitalize">
+                      {appType === "grokbuild" ? "Grok Build" : appType}
+                    </span>
+                    <Switch
+                      checked={isEnabled}
+                      onCheckedChange={(checked) =>
+                        handleTakeoverChange(appType, checked)
+                      }
+                      disabled={
+                        setTakeoverForApp.isPending ||
+                        !isRunning
+                      }
+                    />
+                  </div>
+                );
+              },
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {t("proxy.takeover.hint", {
+              defaultValue:
+                "选择要经 CC Switch 代理的应用，启用后该应用的请求将通过本地代理转发；未勾选的直接走原配置。",
+            })}
+          </p>
+        </div>
 
         {/* Running state: service info + stats */}
         {isRunning && status ? (

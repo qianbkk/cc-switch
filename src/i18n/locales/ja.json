@@ -2663,7 +2663,8 @@
     },
     "switchFailed": "切り替えに失敗しました: {{error}}",
     "takeover": {
-      "hint": "ルーティングするアプリを選択します。有効にすると、そのアプリのリクエストはローカルルーティング経由で転送されます",
+      "hint": "CC Switch 経由でプロキシするアプリを選択します。有効にしたアプリのリクエストはローカルプロキシを経由し、それ以外は元の設定を使用します。",
+      "proxyStoppedHint": "プロキシサービス起動後に有効",
       "enabled": "{{app}} ルーティング有効",
       "disabled": "{{app}} ルーティング無効",
       "failed": "ルーティングの切り替えに失敗しました: {{detail}}",
@@ -2760,7 +2761,7 @@
   },
   "proxyConfig": {
     "proxyEnabled": "ルーティング総スイッチ",
-    "appTakeover": "ルーティング有効",
+    "appTakeover": "アプリプロキシ",
     "perAppConfig": "アプリ別設定",
     "circuitBreaker": "サーキットブレーカー",
     "circuitBreakerSettings": "サーキットブレーカー設定",
