@@ -1,7 +1,7 @@
 # CC Switch 魔改版 — 总体规划与执行状态
 
 > 本文档是本地魔改版（`custom` 分支）的唯一规划文档，供后续会话/开发接续执行。
-> 最近更新：2026-07-19（网关与 Live 保护收尾）
+> 最近更新：2026-07-26（合入上游 v3.18.0，Schema v18）
 
 ---
 
@@ -193,3 +193,37 @@
 | proxy_live_backup 表 | `src-tauri/src/database/schema.rs:264-270` |
 | Live 配置保护 | `src-tauri/src/live_protection.rs` |
 | 写入器（全量替换） | `src-tauri/src/config.rs:274-344`（atomic_write） |
+
+## 10. 上游同步日志
+
+### 2026-07-26 合入上游 v3.18.0（878c26f3）
+
+**冲突解决**：4 处（与计划完全一致）
+1. `README.md` → 全取 ours（fork 魔改版）
+2. `src-tauri/src/database/mod.rs` → `SCHEMA_VERSION = 18`
+3. `src-tauri/src/database/schema.rs` → 迁移编号重排：原 `15→16`（Codex 用量重建）改名为 `17→18`；新增 match 分支 `17 =>`；fork 的 `15→16`/`16→17`（original_hash/managed_hash）保留。两个测试都保留：ours `migrate_v15_to_v17_adds_live_backup_hash_columns`（断言 `SCHEMA_VERSION`）、upstream 改名为 `migrate_v17_to_v18_resets_only_codex_session_usage`（初始版本号 17，最终断言改 `SCHEMA_VERSION`）
+4. `src-tauri/src/services/proxy.rs` → 两处 Grok 接管 hunk：上游 `grok_live_config_supports_takeover` 守卫包裹 fork 的 `record_managed_hash`；严格模式分支保留 `is_ok()` 结构
+
+**Schema 状态**：v18。本地已迁移 DB（v17→v18）启动时一次性重建 Codex 用量。
+
+**自上游带来的关键能力**：
+- Windows 切换闪窗卡死修复
+- 日志持久化 + 密钥脱敏
+- 前端白屏留痕（`FrontendErrorBoundary` + `frontendLogger`）
+- Codex 工具参数兼容
+- xAI/Grok OAuth 全家桶（`subscription_grok.rs`、`xai_oauth_auth.rs`、`XaiOAuthSection.tsx`、预设库）
+- Grok 接管：官方登录态守卫 `grok_live_config_supports_takeover`
+
+**fork 独有保留**：
+- 统一网关 `/gateway/*`（4 路由、ccs- 鉴权）
+- Live 保护 `record_managed_hash` + 冲突 toast
+- Codex auth.json 反向同步
+- 3 隐藏功能补 UI
+
+**与上游意外冲突**：`GROKBUILD_OFFICIAL_PROVIDER_ID` 在上游首次被引用但通过 `database::dao::providers_seed` 定义，合并后两个引用点（`commands/provider.rs`、`services/provider/live.rs`）需要从 `crate::database` 顶层取，**已在 `database/mod.rs` 的 `dao::providers_seed` re-export 列表中显式导出**（一处非冲突 fix，编译无该常量失败 6 处）。
+
+**验证**：
+- `cargo test --lib` 2202 通过 / 0 失败 / 2 忽略（迁移测试 5 项全绿，含重命名的 `migrate_v17_to_v18_resets_only_codex_session_usage`）
+- `cargo check` 干净
+- `tsc --noEmit` 干净
+- 前端 `pnpm test:unit`：73 文件 462 通过 2 失败 —— 仅 `tests/integration/App.test.tsx` MSW 集成测试的两个用例在全套并发下超 5s 默认超时（单跑全过）。已确认非本次合并回归。
