@@ -59,8 +59,8 @@ use axum::{
 };
 use bytes::Bytes;
 use futures::StreamExt;
-use http_body_util::BodyExt;
 use http::Extensions;
+use http_body_util::BodyExt;
 use serde_json::{json, Value};
 use std::str::FromStr;
 
@@ -161,7 +161,10 @@ fn authorize(
     };
 
     if client_key != cfg.api_key {
-        return Err(auth_error_response(StatusCode::UNAUTHORIZED, "网关 key 无效"));
+        return Err(auth_error_response(
+            StatusCode::UNAUTHORIZED,
+            "网关 key 无效",
+        ));
     }
 
     Ok(cfg)
@@ -181,10 +184,7 @@ fn resolve_alias<'a>(
     model: &str,
 ) -> Result<&'a GatewayModelEntry, Vec<String>> {
     let aliases: Vec<String> = cfg.models.iter().map(|m| m.alias.clone()).collect();
-    cfg.models
-        .iter()
-        .find(|m| m.alias == model)
-        .ok_or(aliases)
+    cfg.models.iter().find(|m| m.alias == model).ok_or(aliases)
 }
 
 fn alias_not_found_response(aliases: Vec<String>) -> Response {
@@ -363,9 +363,7 @@ async fn proxy_response_to_axum(
     let bytes = match resp.bytes().await {
         Ok(b) => b,
         Err(e) => {
-            return error_to_response(ProxyError::Internal(format!(
-                "read upstream body: {e}"
-            )));
+            return error_to_response(ProxyError::Internal(format!("read upstream body: {e}")));
         }
     };
 
@@ -412,9 +410,9 @@ async fn proxy_response_to_axum(
         }
         response_builder = response_builder.header(name.clone(), value.clone());
     }
-    response_builder.body(Body::from(body_bytes)).unwrap_or_else(|e| {
-        error_to_response(ProxyError::Internal(format!("build response: {e}")))
-    })
+    response_builder
+        .body(Body::from(body_bytes))
+        .unwrap_or_else(|e| error_to_response(ProxyError::Internal(format!("build response: {e}"))))
 }
 
 /// 上游协议 → Anthropic JSON（中间表示）
@@ -437,10 +435,7 @@ fn upstream_to_anthropic_json(
 }
 
 /// Anthropic JSON → 入站协议
-fn anthropic_to_inbound_json(
-    body: Value,
-    inbound: InboundProtocol,
-) -> Result<Value, ProxyError> {
+fn anthropic_to_inbound_json(body: Value, inbound: InboundProtocol) -> Result<Value, ProxyError> {
     match inbound {
         InboundProtocol::Anthropic => Ok(body),
         InboundProtocol::OpenAiChat => transform::anthropic_to_openai(body),
@@ -461,8 +456,7 @@ fn convert_response_body(
     if inbound == InboundProtocol::Anthropic && claude_api_format.is_none() {
         return Ok(upstream_body);
     }
-    if inbound == InboundProtocol::OpenAiResponses
-        && claude_api_format == Some("openai_responses")
+    if inbound == InboundProtocol::OpenAiResponses && claude_api_format == Some("openai_responses")
     {
         return Ok(upstream_body);
     }
@@ -475,32 +469,25 @@ fn convert_response_body(
 
 /// SSE 链式构造：上游 → Anthropic SSE → 入站 SSE
 fn build_inbound_sse_stream(
-    upstream: std::pin::Pin<
-        Box<dyn futures::Stream<Item = Result<Bytes, std::io::Error>> + Send>,
-    >,
+    upstream: std::pin::Pin<Box<dyn futures::Stream<Item = Result<Bytes, std::io::Error>> + Send>>,
     upstream_format: Option<&str>,
     inbound: InboundProtocol,
 ) -> Result<
     std::pin::Pin<Box<dyn futures::Stream<Item = Result<Bytes, std::io::Error>> + Send>>,
     ProxyError,
 > {
-    type SseStream = std::pin::Pin<
-        Box<dyn futures::Stream<Item = Result<Bytes, std::io::Error>> + Send>,
-    >;
+    type SseStream =
+        std::pin::Pin<Box<dyn futures::Stream<Item = Result<Bytes, std::io::Error>> + Send>>;
     let anthropic_stream: SseStream = match upstream_format {
         None => upstream,
-        Some("openai_responses") => Box::pin(
-            streaming_responses::create_anthropic_sse_stream_from_responses(upstream),
-        ),
-        Some("gemini_native") => Box::pin(
-            streaming_gemini::create_anthropic_sse_stream_from_gemini(
-                upstream,
-                None,
-                None,
-                None,
-                None,
-            ),
-        ),
+        Some("openai_responses") => {
+            Box::pin(streaming_responses::create_anthropic_sse_stream_from_responses(upstream))
+        }
+        Some("gemini_native") => {
+            Box::pin(streaming_gemini::create_anthropic_sse_stream_from_gemini(
+                upstream, None, None, None, None,
+            ))
+        }
         Some("openai_chat") => Box::pin(
             // Chat SSE → Anthropic SSE（复用 Claude 客户端 + OpenAI 兼容上游的现成转换器）
             streaming::create_anthropic_sse_stream(upstream),
@@ -514,9 +501,7 @@ fn build_inbound_sse_stream(
     let final_stream: SseStream = match inbound {
         InboundProtocol::Anthropic => anthropic_stream,
         InboundProtocol::OpenAiResponses => Box::pin(
-            streaming_codex_anthropic::create_responses_sse_stream_from_anthropic(
-                anthropic_stream,
-            ),
+            streaming_codex_anthropic::create_responses_sse_stream_from_anthropic(anthropic_stream),
         ),
         InboundProtocol::OpenAiChat => Box::pin(
             // Anthropic SSE → Chat SSE（网关新增转换器）
@@ -677,13 +662,7 @@ async fn process_gateway_request(
         .unwrap_or(false);
 
     match forward_with_single_provider(
-        &state,
-        provider,
-        app_type,
-        endpoint,
-        body,
-        headers,
-        extensions,
+        &state, provider, app_type, endpoint, body, headers, extensions,
     )
     .await
     {
@@ -691,5 +670,139 @@ async fn process_gateway_request(
             proxy_response_to_axum(resp, inbound, upstream_format, is_streaming).await
         }
         Err(e) => error_to_response(e),
+    }
+}
+
+// =====================================================================
+// 冒烟测试：路由级端到端（鉴权 / alias 路由 / 模型列表）
+// =====================================================================
+
+#[cfg(test)]
+mod tests {
+    use crate::database::Database;
+    use crate::proxy::server::ProxyServer;
+    use crate::proxy::types::ProxyConfig;
+    use axum::body::Body as AxumBody;
+    use http_body_util::BodyExt as _;
+    use serde_json::{json, Value};
+    use std::sync::Arc;
+    use tower::ServiceExt;
+
+    const KEY: &str = "ccs-testkey";
+
+    fn setup_router(enabled: bool) -> axum::Router {
+        let db = Arc::new(Database::memory().expect("memory db"));
+        let cfg = json!({
+            "enabled": enabled,
+            "apiKey": KEY,
+            "models": [{
+                "alias": "test-provider/claude-test-1",
+                "providerId": "prov-1",
+                "appType": "claude",
+                "model": "claude-test-1"
+            }]
+        });
+        db.set_setting("gateway_config", &cfg.to_string())
+            .expect("save gateway config");
+        let server = ProxyServer::new(ProxyConfig::default(), db, None);
+        server.build_router()
+    }
+
+    async fn body_json(resp: axum::response::Response) -> Value {
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null)
+    }
+
+    fn post_messages(auth: Option<&str>, model: &str) -> http::Request<AxumBody> {
+        let mut builder = http::Request::builder()
+            .method("POST")
+            .uri("/gateway/v1/messages")
+            .header("content-type", "application/json");
+        if let Some(key) = auth {
+            builder = builder.header("authorization", format!("Bearer {key}"));
+        }
+        builder
+            .body(AxumBody::from(
+                json!({"model": model, "max_tokens": 8, "messages": []}).to_string(),
+            ))
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn missing_auth_returns_401() {
+        let router = setup_router(true);
+        let resp = router
+            .oneshot(post_messages(None, "test-provider/claude-test-1"))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), http::StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn wrong_key_returns_401() {
+        let router = setup_router(true);
+        let resp = router
+            .oneshot(post_messages(
+                Some("wrong-key"),
+                "test-provider/claude-test-1",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), http::StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn disabled_gateway_returns_403() {
+        let router = setup_router(false);
+        let resp = router
+            .oneshot(post_messages(Some(KEY), "test-provider/claude-test-1"))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), http::StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn unknown_alias_returns_400_with_available_list() {
+        let router = setup_router(true);
+        let resp = router
+            .oneshot(post_messages(Some(KEY), "nonexistent/model"))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), http::StatusCode::BAD_REQUEST);
+        let body = body_json(resp).await;
+        let message = body["error"]["message"].as_str().unwrap_or_default();
+        assert!(
+            message.contains("test-provider/claude-test-1"),
+            "error should list available aliases, got: {message}"
+        );
+    }
+
+    #[tokio::test]
+    async fn models_endpoint_lists_aliases() {
+        let router = setup_router(true);
+        let req = http::Request::builder()
+            .method("GET")
+            .uri("/gateway/v1/models")
+            .header("authorization", format!("Bearer {KEY}"))
+            .body(AxumBody::empty())
+            .unwrap();
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), http::StatusCode::OK);
+        let body = body_json(resp).await;
+        assert_eq!(body["object"], "list");
+        assert_eq!(body["data"][0]["id"], "test-provider/claude-test-1");
+    }
+
+    #[tokio::test]
+    async fn x_api_key_header_is_accepted() {
+        let router = setup_router(true);
+        let req = http::Request::builder()
+            .method("GET")
+            .uri("/gateway/v1/models")
+            .header("x-api-key", KEY)
+            .body(AxumBody::empty())
+            .unwrap();
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), http::StatusCode::OK);
     }
 }

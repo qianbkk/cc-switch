@@ -790,13 +790,35 @@ impl Database {
         let hash = original_hash.unwrap_or("");
 
         conn.execute(
-            "INSERT OR REPLACE INTO proxy_live_backup (app_type, original_config, original_hash, backed_up_at)
-             VALUES (?1, ?2, ?3, ?4)",
+            "INSERT INTO proxy_live_backup (app_type, original_config, original_hash, backed_up_at)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(app_type) DO UPDATE SET
+                 original_config = excluded.original_config,
+                 original_hash = excluded.original_hash,
+                 backed_up_at = excluded.backed_up_at",
             rusqlite::params![app_type, config_json, hash, now],
         )
         .map_err(|e| AppError::Database(e.to_string()))?;
 
-        log::info!("已备份 {app_type} Live 配置 (hash: {}…)", &hash[..hash.len().min(8)]);
+        log::info!(
+            "已备份 {app_type} Live 配置 (hash: {}…)",
+            &hash[..hash.len().min(8)]
+        );
+        Ok(())
+    }
+
+    /// 记录最近一次由 CC Switch 写入 live 文件后的 hash。
+    pub async fn set_live_managed_hash(
+        &self,
+        app_type: &str,
+        managed_hash: Option<&str>,
+    ) -> Result<(), AppError> {
+        let conn = lock_conn!(self.conn);
+        conn.execute(
+            "UPDATE proxy_live_backup SET managed_hash = ?1 WHERE app_type = ?2",
+            rusqlite::params![managed_hash.unwrap_or(""), app_type],
+        )
+        .map_err(|e| AppError::Database(e.to_string()))?;
         Ok(())
     }
 
@@ -820,7 +842,8 @@ impl Database {
 
         let result = conn.query_row(
             "SELECT app_type, original_config, backed_up_at,
-                    CASE WHEN original_hash IS NULL THEN '' ELSE original_hash END
+                    CASE WHEN original_hash IS NULL THEN '' ELSE original_hash END,
+                    CASE WHEN managed_hash IS NULL THEN '' ELSE managed_hash END
              FROM proxy_live_backup WHERE app_type = ?1",
             rusqlite::params![app_type],
             |row| {
@@ -830,7 +853,19 @@ impl Database {
                     backed_up_at: row.get(2)?,
                     original_hash: {
                         let s: String = row.get(3)?;
-                        if s.is_empty() { None } else { Some(s) }
+                        if s.is_empty() {
+                            None
+                        } else {
+                            Some(s)
+                        }
+                    },
+                    managed_hash: {
+                        let s: String = row.get(4)?;
+                        if s.is_empty() {
+                            None
+                        } else {
+                            Some(s)
+                        }
                     },
                 })
             },

@@ -339,8 +339,9 @@ describe("SettingsPage Component", () => {
     });
 
     fireEvent.click(screen.getByText("settings.tabAdvanced"));
-    fireEvent.click(screen.getByText("settings.advanced.cloudSync.title"));
-    expect(screen.getByText("webdav-sync-section:none")).toBeInTheDocument();
+    expect(
+      screen.queryByText("settings.advanced.cloudSync.title"),
+    ).not.toBeInTheDocument();
     fireEvent.click(screen.getByText("settings.advanced.data.title"));
 
     // 有文件时，点击导入按钮执行 importConfig

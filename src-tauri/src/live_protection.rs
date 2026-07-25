@@ -4,13 +4,14 @@
 //! 接管写盘或供应商切换时覆盖用户的改动。
 //!
 //! ## 工作原理
-//! 1. 每次接管（takeover）前，已存在的 `proxy_live_backup` 行包含 `original_hash`
+//! 1. 每次接管（takeover）前，备份记录保存 `original_hash`
 //!    （接管前对原始 live 文件算 SHA256）。
-//! 2. 写盘前用 [`check_user_modified`] 比对磁盘当前 hash 与 `original_hash`：
-//!    - 若一致：用户在接管后未改动 live，安全覆盖；
+//! 2. 每次 CC Switch 写盘成功后保存 `managed_hash`。
+//! 3. 写盘前用 [`check_user_modified`] 比对磁盘当前 hash 与最近的应用写入 hash：
+//!    - 若一致：用户未修改 live，安全覆盖；
 //!    - 若不一致：返回 `AppError::LiveConfigModifiedByUser`，**不写盘**，
 //!      错误经由 command 层回到前端。
-//! 3. 设置开关 `protect_user_live_edits`（默认 true）允许用户整体关闭校验。
+//! 4. 设置开关 `protect_user_live_edits`（默认 true）允许用户整体关闭校验。
 //!
 //! 详见 `docs/CUSTOM_FORK_PLAN.md` §7.1。
 
@@ -70,6 +71,12 @@ pub fn compute_file_hash(path: &Path) -> Option<String> {
     }
 }
 
+/// 记录最近一次由 CC Switch 写入 live 文件后的 hash。
+pub async fn record_managed_hash(db: &Database, app_type: &str) -> Result<(), AppError> {
+    let hash = live_file_path(app_type).and_then(|path| compute_file_hash(&path));
+    db.set_live_managed_hash(app_type, hash.as_deref()).await
+}
+
 /// 读取指定字符串内容的 SHA256 十六进制摘要（仅在测试中使用）。
 #[cfg(test)]
 pub fn hash_content(content: &str) -> String {
@@ -91,7 +98,10 @@ pub fn get_protect_user_live_edits(db: &Database) -> bool {
 
 /// 写入 `settings` 表中 `protect_user_live_edits` 的值。
 pub fn set_protect_user_live_edits(db: &Database, enabled: bool) -> Result<(), AppError> {
-    db.set_setting(PROTECT_USER_LIVE_EDITS_KEY, if enabled { "true" } else { "false" })
+    db.set_setting(
+        PROTECT_USER_LIVE_EDITS_KEY,
+        if enabled { "true" } else { "false" },
+    )
 }
 
 /// 检查用户是否在接管后修改了指定应用的 live 文件。
@@ -101,9 +111,10 @@ pub fn set_protect_user_live_edits(db: &Database, enabled: bool) -> Result<(), A
 /// 2. 设置开关关闭 → `Ok(())` 跳过；
 /// 3. 没有备份记录（即 ccswitch 此前从未接管过该应用）→ `Ok(())` 跳过
 ///    （首次接管无"用户原始版"可对照）；
-/// 4. 备份 `original_hash` 为空字符串（迁移期老数据）→ `Ok(())` 跳过；
-/// 5. 磁盘当前 hash 与备份 hash 一致 → `Ok(())` 通过；
-/// 6. 否则 → `Err(AppError::LiveConfigModifiedByUser { ... })`，
+/// 4. `managed_hash` 为空时回退到 `original_hash`（兼容升级前的备份）；
+/// 5. 两个 hash 都为空（迁移期老数据）→ `Ok(())` 跳过；
+/// 6. 磁盘当前 hash 与期望 hash 一致 → `Ok(())` 通过；
+/// 7. 否则 → `Err(AppError::LiveConfigModifiedByUser { ... })`，
 ///    **调用方必须不写盘并把错误回传前端**。
 pub async fn check_user_modified(db: &Database, app_type: &str) -> Result<(), AppError> {
     let Some(path) = live_file_path(app_type) else {
@@ -124,7 +135,12 @@ pub async fn check_user_modified(db: &Database, app_type: &str) -> Result<(), Ap
         }
     };
 
-    let expected = backup.original_hash.as_deref().unwrap_or("").trim();
+    let expected = backup
+        .managed_hash
+        .as_deref()
+        .or(backup.original_hash.as_deref())
+        .unwrap_or("")
+        .trim();
     if expected.is_empty() {
         // 迁移期老数据：备份无 hash。无法校验，放行（保持历史行为）。
         return Ok(());

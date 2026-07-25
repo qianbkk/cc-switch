@@ -1,7 +1,7 @@
 # CC Switch 魔改版 — 总体规划与执行状态
 
 > 本文档是本地魔改版（`custom` 分支）的唯一规划文档，供后续会话/开发接续执行。
-> 最近更新：2026-07-19（晚）
+> 最近更新：2026-07-19（网关与 Live 保护收尾）
 
 ---
 
@@ -50,6 +50,14 @@
   - 修改 `src-tauri/src/proxy/mod.rs`（+pub mod gateway）
   - 修改 `src-tauri/src/proxy/server.rs`（+挂 /gateway/* 4 路由）
   - 修改 `src-tauri/src/lib.rs`（注册 3 command + 启动恢复钩子）
+- `b131556d` feat(live-protection): 保护用户手动修改的 live 配置
+  - 为 Live 备份增加原始 hash，并新增默认开启的保护开关。
+  - 接入 Claude/Codex/Gemini/Grok Build 的接管、同步和切换写盘入口。
+  - 前端提供保护开关和用户修改冲突提示。
+- `705fa20e` feat(gateway): 补齐 Chat↔Anthropic SSE 流式转换
+  - 新增 `streaming_anthropic_chat.rs`，覆盖文本、工具调用、usage、错误和非流式 JSON 兜底。
+  - 网关三种入站协议与 Anthropic、OpenAI Chat、OpenAI Responses、Gemini 上游之间的流式链路已补齐。
+- 当前工作树收尾：补充网关路由级鉴权/alias/model 冒烟测试；统一 `tower` 到 Axum 0.7 使用的 0.5 版本；Live 备份增加 `managed_hash`，避免把 CC Switch 自己的写盘误判为用户修改。
 
 ## 5. 设计契约（统一网关）
 
@@ -92,28 +100,31 @@
 链 1 = 上游→Anthropic（已有 `openai_to_anthropic`/`responses_to_anthropic`/`gemini_to_anthropic`） + Anthropic→入站
 链 2 = 同链 1
 
-**Streaming（⚠️ 部分实现）**：
+**Streaming（✅ 已补齐）**：
 
 | 入站\上游 | Anthropic | OpenAI Chat | OpenAI Responses | Gemini |
 |---|---|---|---|---|
-| Anthropic | ✅ 0 转换 | ⚠️ passthrough+warn | ✅ streaming_responses | ✅ streaming_gemini |
-| OpenAI Responses | ✅ streaming_codex_anthropic | ⚠️ passthrough+warn | ✅ 0 转换 | ✅ 链式 |
-| OpenAI Chat | ⚠️ passthrough+warn | ✅ 0 转换 | ⚠️ passthrough+warn | ⚠️ passthrough+warn |
+| Anthropic | ✅ 0 转换 | ✅ Chat→Anthropic | ✅ streaming_responses | ✅ streaming_gemini |
+| OpenAI Responses | ✅ streaming_codex_anthropic | ✅ Chat→Anthropic→Responses | ✅ 0 转换 | ✅ 链式 |
+| OpenAI Chat | ✅ Anthropic→Chat | ✅ 0 转换 | ✅ Responses→Anthropic→Chat | ✅ Gemini→Anthropic→Chat |
 
-✅ = 已复用现有 streaming_* 转换器工作  
-⚠️ = 缺 Chat↔Anthropic SSE 转换器，暂透传+warn（响应会被客户端按上游协议解析失败）
+✅ = 已有转换器或链式转换可用；Gemini 只作为上游协议，不作为统一网关入站协议。
 
 ## 6. 当前工具链状态
+
+> `cargo build` 已通过；剩余待办是启动应用后的真实端到端冒烟。
 
 - ✅ Rust 1.95（~/.cargo/bin/cargo）
 - ✅ MSVC Build Tools（已装，cargo build 可用）
 - ✅ 4 端点 `cargo check` 零错误
-- ⏸ 待办：实际 `cargo build` + 端到端冒烟（需要跑应用）
-- ⏸ 前端 pnpm install 首次需 `pnpm approve-builds`（之前因 402 没跑端到端）
+- ✅ Rust 全量库测试：2019 passed，2 ignored；网关路由冒烟测试 6 passed
+- ✅ 前端 TypeScript 类型检查通过（直接调用本地 `tsc`）
+- ⏸ 待办：实际 `cargo build` + 启动应用后的端到端冒烟（需要真实上游或 mock upstream）
+- ⏸ pnpm 的构建脚本审批仍需由用户决定，当前不影响直接 TypeScript 检查
 
 ## 7. 后续待办（按优先级）
 
-### 7.1 Live 配置保护（用户需求 #2）⚠️ 未开始
+### 7.1 Live 配置保护（用户需求 #2）✅ 已完成
 **症状**：用户在 Claude/Codex/Gemini 的 live 配置文件（如 `~/.codex/config.toml`）做手动修改后，重启 ccswitch 或切换供应商时，修改被接管写盘覆盖。
 
 **根因**（已确认）：
@@ -124,11 +135,10 @@
 - 多个写者（`takeover_live_config_strict`、`sync_*_live`、`ProfileService::apply`）都会触发覆盖
 
 **推荐方案（最小侵入）**：
-1. 扩展 `proxy_live_backup` 表加 `original_hash` 列（接管前算 SHA256）
-2. 新增 `live_protection.rs` 模块封装校验逻辑
-3. 接入 `takeover_live_config_strict` 和其他 live 写者前：若文件存在且 hash != backup.original_hash，则**跳过覆盖** + 返回错误 `LiveConfigModifiedByUser`
-4. 新增 settings 开关 `protect_user_live_edits`（默认 true）
-5. 前端：写失败时弹"用户已修改 live 文件"提示，给"查看 diff / 强制接管 / 取消"三选一
+1. `proxy_live_backup` 表同时保存 `original_hash` 和最近一次应用写入的 `managed_hash`。
+2. `live_protection.rs` 封装校验逻辑，默认开启 `protect_user_live_edits`。
+3. 接入接管、热切换和代理运行期间的同步写盘；只在当前文件 hash 不等于最近一次 CC Switch 写入 hash 时拒绝覆盖。
+4. 前端提供保护开关和用户修改冲突提示；用户关闭保护后可恢复强制接管行为。
 
 **改动面**：
 - 数据库：`schema.rs` 加列 + `dao/proxy.rs` 加 hash 字段；migration 旧数据可填空
@@ -138,19 +148,15 @@
 
 **预估**：1 天工作量；改动跨 ~5 个 Rust 文件 + 1 个前端文件
 
-### 7.2 网关响应 SSE 增强 ⚠️ 未开始
-当前缺口（5.4 表里 ⚠️ 行）：
-- Chat→Anthropic SSE 转换缺
-- Anthropic→Chat SSE 转换缺
-
-补齐需新增 `providers/streaming_anthropic_chat.rs`：复用现有 Responses state machine，把"create responses"反向，输出 Chat 的 `data: {...}\n\n`。约 400 行。
+### 7.2 网关响应 SSE 增强 ✅ 已完成
+新增 `providers/streaming_anthropic_chat.rs`，完成 Chat↔Anthropic SSE 转换，并接入网关全部协议链路。
 
 **预估**：1-2 天工作量。
 
-### 7.3 按应用禁用代理 UI 优化（用户需求 #1）⚠️ 调研完成，未改动
+### 7.3 按应用禁用代理 UI 优化（用户需求 #1）✅ 已完成
 **调研结论**：后端 per-app API `set_proxy_takeover_for_app(app, false)` 已完整可用，会自动恢复对应 app 的 live 配置。前端 `ProxyPanel` 已有四应用独立 Switch。**95% 已实现，零后端改动**。
 
-**仅 UI 优化**：
+**已完成 UI 优化**：
 - 让 `ProxyPanel` 接管区域常驻可见（不依赖代理运行状态）
 - 文案从"应用接管"改为"使用 CC Switch 代理"，更直观
 - 主界面 `ProxyToggle` 加可见文字标签
@@ -185,4 +191,5 @@
 | 接管恢复（三层兜底） | `src-tauri/src/services/proxy.rs:1788-1845` |
 | proxy_config 表 | `src-tauri/src/database/schema.rs:126-139` |
 | proxy_live_backup 表 | `src-tauri/src/database/schema.rs:264-270` |
+| Live 配置保护 | `src-tauri/src/live_protection.rs` |
 | 写入器（全量替换） | `src-tauri/src/config.rs:274-344`（atomic_write） |

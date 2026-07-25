@@ -154,6 +154,11 @@ pub struct LiveBackup {
     /// 迁移前的老数据为 `None`；`live_protection` 模块据此判断是否跳过校验。
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub original_hash: Option<String>,
+    /// 最近一次由 CC Switch 写入的 live 文件 SHA256 hex。
+    ///
+    /// 与 `original_hash` 分开保存，避免把 CC Switch 自己的接管写入误判为用户修改。
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub managed_hash: Option<String>,
 }
 
 /// 全局代理配置（统一字段，三行镜像）

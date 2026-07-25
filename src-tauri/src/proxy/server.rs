@@ -10,8 +10,7 @@
 
 use super::{
     failover_switch::FailoverSwitchManager,
-    gateway,
-    handlers,
+    gateway, handlers,
     log_codes::srv as log_srv,
     provider_router::ProviderRouter,
     providers::{codex_chat_history::CodexChatHistoryStore, gemini_shadow::GeminiShadowStore},
@@ -289,7 +288,7 @@ impl ProxyServer {
         );
     }
 
-    fn build_router(&self) -> Router {
+    pub(crate) fn build_router(&self) -> Router {
         Router::new()
             // 健康检查
             .route("/health", get(handlers::health_check))

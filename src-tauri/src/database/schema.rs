@@ -264,7 +264,8 @@ impl Database {
         conn.execute(
             "CREATE TABLE IF NOT EXISTS proxy_live_backup (
             app_type TEXT PRIMARY KEY, original_config TEXT NOT NULL, backed_up_at TEXT NOT NULL,
-            original_hash TEXT NOT NULL DEFAULT ''
+            original_hash TEXT NOT NULL DEFAULT '',
+            managed_hash TEXT NOT NULL DEFAULT ''
         )",
             [],
         )
@@ -511,6 +512,11 @@ impl Database {
                         log::info!("迁移数据库从 v15 到 v16（proxy_live_backup 添加 original_hash 列，保护用户手动修改）");
                         Self::migrate_v15_to_v16(conn)?;
                         Self::set_user_version(conn, 16)?;
+                    }
+                    16 => {
+                        log::info!("迁移数据库从 v16 到 v17（proxy_live_backup 添加 managed_hash 列，区分应用自身写入）");
+                        Self::migrate_v16_to_v17(conn)?;
+                        Self::set_user_version(conn, 17)?;
                     }
                     _ => {
                         return Err(AppError::Database(format!(
@@ -1530,6 +1536,20 @@ impl Database {
             )?;
         }
         log::info!("v15 -> v16 迁移完成：proxy_live_backup 已支持 original_hash");
+        Ok(())
+    }
+
+    /// v16 -> v17: 为 proxy_live_backup 添加最近一次应用写入的 hash。
+    fn migrate_v16_to_v17(conn: &Connection) -> Result<(), AppError> {
+        if Self::table_exists(conn, "proxy_live_backup")? {
+            Self::add_column_if_missing(
+                conn,
+                "proxy_live_backup",
+                "managed_hash",
+                "TEXT NOT NULL DEFAULT ''",
+            )?;
+        }
+        log::info!("v16 -> v17 迁移完成：proxy_live_backup 已支持 managed_hash");
         Ok(())
     }
 
@@ -3046,7 +3066,7 @@ mod tests {
     }
 
     #[test]
-    fn migrate_v15_to_v16_adds_proxy_live_backup_original_hash_column() -> Result<(), AppError> {
+    fn migrate_v15_to_v17_adds_live_backup_hash_columns() -> Result<(), AppError> {
         let conn = Connection::open_in_memory()?;
         conn.execute(
             "CREATE TABLE proxy_live_backup (
@@ -3078,6 +3098,12 @@ mod tests {
             |row| row.get(0),
         )?;
         assert_eq!(original_hash, "");
+        let managed_hash: String = conn.query_row(
+            "SELECT managed_hash FROM proxy_live_backup WHERE app_type = 'claude'",
+            [],
+            |row| row.get(0),
+        )?;
+        assert_eq!(managed_hash, "");
         // 原始内容应保留
         let original_config: String = conn.query_row(
             "SELECT original_config FROM proxy_live_backup WHERE app_type = 'claude'",

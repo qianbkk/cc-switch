@@ -357,6 +357,9 @@ impl ProxyService {
             &effective_provider,
         );
         self.write_claude_live(&effective_settings)?;
+        crate::live_protection::record_managed_hash(&self.db, "claude")
+            .await
+            .map_err(|e| e.to_string())?;
         Ok(())
     }
 
@@ -391,6 +394,9 @@ impl ProxyService {
         )?;
 
         self.write_codex_takeover_live_for_provider(&effective_settings, Some(provider))?;
+        crate::live_protection::record_managed_hash(&self.db, "codex")
+            .await
+            .map_err(|e| e.to_string())?;
         Ok(())
     }
 
@@ -419,7 +425,11 @@ impl ProxyService {
         let (proxy_url, _) = self.build_proxy_urls().await?;
         let proxy_grok_base_url = format!("{}/grokbuild/v1", proxy_url.trim_end_matches('/'));
         Self::apply_grok_takeover_fields(&mut effective_settings, &proxy_grok_base_url)?;
-        self.write_grok_live(&effective_settings)
+        self.write_grok_live(&effective_settings)?;
+        crate::live_protection::record_managed_hash(&self.db, "grokbuild")
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok(())
     }
 
     fn get_current_provider_for_app(&self, app_type: &AppType) -> Result<Option<Provider>, String> {
@@ -1402,10 +1412,8 @@ impl ProxyService {
             } else {
                 let json_str = serde_json::to_string(&config)
                     .map_err(|e| format!("序列化 Claude 配置失败: {e}"))?;
-                let hash =
-                    crate::live_protection::live_file_path("claude").and_then(|p| {
-                        crate::live_protection::compute_file_hash(&p)
-                    });
+                let hash = crate::live_protection::live_file_path("claude")
+                    .and_then(|p| crate::live_protection::compute_file_hash(&p));
                 self.db
                     .save_live_backup("claude", &json_str, hash.as_deref())
                     .await
@@ -1420,9 +1428,8 @@ impl ProxyService {
             } else {
                 let json_str = serde_json::to_string(&config)
                     .map_err(|e| format!("序列化 Codex 配置失败: {e}"))?;
-                let hash = crate::live_protection::live_file_path("codex").and_then(|p| {
-                    crate::live_protection::compute_file_hash(&p)
-                });
+                let hash = crate::live_protection::live_file_path("codex")
+                    .and_then(|p| crate::live_protection::compute_file_hash(&p));
                 self.db
                     .save_live_backup("codex", &json_str, hash.as_deref())
                     .await
@@ -1437,9 +1444,8 @@ impl ProxyService {
             } else {
                 let json_str = serde_json::to_string(&config)
                     .map_err(|e| format!("序列化 Gemini 配置失败: {e}"))?;
-                let hash = crate::live_protection::live_file_path("gemini").and_then(|p| {
-                    crate::live_protection::compute_file_hash(&p)
-                });
+                let hash = crate::live_protection::live_file_path("gemini")
+                    .and_then(|p| crate::live_protection::compute_file_hash(&p));
                 self.db
                     .save_live_backup("gemini", &json_str, hash.as_deref())
                     .await
@@ -1454,10 +1460,8 @@ impl ProxyService {
             } else {
                 let json_str = serde_json::to_string(&config)
                     .map_err(|e| format!("序列化 Grok Build 配置失败: {e}"))?;
-                let hash =
-                    crate::live_protection::live_file_path("grokbuild").and_then(|p| {
-                        crate::live_protection::compute_file_hash(&p)
-                    });
+                let hash = crate::live_protection::live_file_path("grokbuild")
+                    .and_then(|p| crate::live_protection::compute_file_hash(&p));
                 self.db
                     .save_live_backup("grokbuild", &json_str, hash.as_deref())
                     .await
@@ -1490,9 +1494,8 @@ impl ProxyService {
 
         let json_str = serde_json::to_string(&config)
             .map_err(|e| format!("序列化 {app_type_str} 配置失败: {e}"))?;
-        let hash = crate::live_protection::live_file_path(app_type_str).and_then(|p| {
-            crate::live_protection::compute_file_hash(&p)
-        });
+        let hash = crate::live_protection::live_file_path(app_type_str)
+            .and_then(|p| crate::live_protection::compute_file_hash(&p));
         self.db
             .save_live_backup(app_type_str, &json_str, hash.as_deref())
             .await
@@ -1577,6 +1580,9 @@ impl ProxyService {
                 &claude_provider,
             );
             self.write_claude_live(&live_config)?;
+            crate::live_protection::record_managed_hash(&self.db, "claude")
+                .await
+                .map_err(|e| e.to_string())?;
             log::info!("Claude Live 配置已接管，代理地址: {proxy_url}");
         }
 
@@ -1590,6 +1596,9 @@ impl ProxyService {
             )?;
 
             self.write_codex_takeover_live_for_provider(&live_config, Some(&codex_provider))?;
+            crate::live_protection::record_managed_hash(&self.db, "codex")
+                .await
+                .map_err(|e| e.to_string())?;
             log::info!("Codex Live 配置已接管，代理地址: {proxy_codex_base_url}");
         }
 
@@ -1606,6 +1615,9 @@ impl ProxyService {
                 });
             }
             self.write_gemini_live(&live_config)?;
+            crate::live_protection::record_managed_hash(&self.db, "gemini")
+                .await
+                .map_err(|e| e.to_string())?;
             log::info!("Gemini Live 配置已接管，代理地址: {proxy_url}");
         }
 
@@ -1613,6 +1625,9 @@ impl ProxyService {
         if let Ok(mut live_config) = self.read_grok_live() {
             Self::apply_grok_takeover_fields(&mut live_config, &proxy_grok_base_url)?;
             self.write_grok_live(&live_config)?;
+            crate::live_protection::record_managed_hash(&self.db, "grokbuild")
+                .await
+                .map_err(|e| e.to_string())?;
             log::info!("Grok Build Live 配置已接管，代理地址: {proxy_grok_base_url}");
         }
 
@@ -1681,6 +1696,10 @@ impl ProxyService {
             _ => return Err("该应用不支持代理功能".to_string()),
         }
 
+        crate::live_protection::record_managed_hash(&self.db, app_type.as_str())
+            .await
+            .map_err(|e| e.to_string())?;
+
         Ok(())
     }
 
@@ -1715,7 +1734,11 @@ impl ProxyService {
                             ClaudeTakeoverAuthPolicy::PreserveExistingOrAuthToken,
                         );
                     }
-                    let _ = self.write_claude_live(&live_config);
+                    if self.write_claude_live(&live_config).is_ok() {
+                        crate::live_protection::record_managed_hash(&self.db, "claude")
+                            .await
+                            .map_err(|e| e.to_string())?;
+                    }
                 }
             }
             AppType::Codex => {
@@ -1731,6 +1754,9 @@ impl ProxyService {
                         &live_config,
                         Some(&codex_provider),
                     )?;
+                    crate::live_protection::record_managed_hash(&self.db, "codex")
+                        .await
+                        .map_err(|e| e.to_string())?;
                 }
             }
             AppType::Gemini => {
@@ -1745,13 +1771,21 @@ impl ProxyService {
                         });
                     }
 
-                    let _ = self.write_gemini_live(&live_config);
+                    if self.write_gemini_live(&live_config).is_ok() {
+                        crate::live_protection::record_managed_hash(&self.db, "gemini")
+                            .await
+                            .map_err(|e| e.to_string())?;
+                    }
                 }
             }
             AppType::GrokBuild => {
                 if let Ok(mut live_config) = self.read_grok_live() {
                     Self::apply_grok_takeover_fields(&mut live_config, &proxy_grok_base_url)?;
-                    let _ = self.write_grok_live(&live_config);
+                    if self.write_grok_live(&live_config).is_ok() {
+                        crate::live_protection::record_managed_hash(&self.db, "grokbuild")
+                            .await
+                            .map_err(|e| e.to_string())?;
+                    }
                 }
             }
             _ => {}
@@ -1796,6 +1830,10 @@ impl ProxyService {
             }
             _ => {}
         }
+
+        crate::live_protection::record_managed_hash(&self.db, app_type.as_str())
+            .await
+            .map_err(|e| e.to_string())?;
 
         Ok(())
     }
