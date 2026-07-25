@@ -2359,6 +2359,12 @@ impl ProviderService {
             }
         }
 
+        // 修 Bug #3646：保存 Codex provider 后主动把 ~/.codex/auth.json 的
+        // OPENAI_API_KEY 同步成 DB 真值。Codex CLI 0.14+ 启动会自动写回
+        // 陈年值，本调用保证下次 Codex 启动拿到 DB 真值（不依赖 Codex CLI）。
+        // 失败降级为 warn，不阻塞保存流程。
+        crate::services::codex_auth_sync::maybe_sync_codex_auth(app_type.clone(), &provider);
+
         Ok(true)
     }
 
@@ -2744,6 +2750,10 @@ impl ProviderService {
         if let Err(err) = McpService::sync_enabled_for_app(state, &app_type) {
             log::warn!("切换供应商后重投影 {app_type:?} MCP 失败（将在下次同步时自愈）: {err}");
         }
+
+        // 修 Bug #3646：切换 Codex provider 后主动把 ~/.codex/auth.json
+        // 同步成新目标 provider 的 DB 真值。失败降级为 warn。
+        crate::services::codex_auth_sync::maybe_sync_codex_auth(app_type.clone(), provider);
 
         Ok(result)
     }
