@@ -45,7 +45,10 @@ pub fn sync_codex_auth_with_db(db_key: &str) -> Result<(), AppError> {
 ///
 /// - 仅当 `app_type == Codex` 且 provider 有非空 `auth.OPENAI_API_KEY` 时才同步
 /// - 失败降级为 `log::warn!`，**绝不返回错误**（保存/切换流程不因本模块失败）
-pub fn maybe_sync_codex_auth(app_type: crate::app_config::AppType, provider: &crate::provider::Provider) {
+pub fn maybe_sync_codex_auth(
+    app_type: crate::app_config::AppType,
+    provider: &crate::provider::Provider,
+) {
     use crate::app_config::AppType;
 
     if !matches!(app_type, AppType::Codex) {
@@ -63,9 +66,7 @@ pub fn maybe_sync_codex_auth(app_type: crate::app_config::AppType, provider: &cr
         return;
     }
     if let Err(e) = sync_codex_auth_with_db(key) {
-        log::warn!(
-            "[CodexAuthSync] auth.json 同步失败（保存流程仍继续，不影响 DB）: {e}"
-        );
+        log::warn!("[CodexAuthSync] auth.json 同步失败（保存流程仍继续，不影响 DB）: {e}");
     }
 }
 
@@ -143,15 +144,12 @@ pub fn sync_codex_auth_at_path(auth_path: &Path, db_key: &str) -> Result<(), App
     );
     let temp_path = parent.join(&temp_name);
 
-    let json_text = serde_json::to_string_pretty(&data).map_err(|e| {
-        AppError::Message(format!("[CodexAuthSync] serialize failed: {e}"))
-    })?;
+    let json_text = serde_json::to_string_pretty(&data)
+        .map_err(|e| AppError::Message(format!("[CodexAuthSync] serialize failed: {e}")))?;
     fs::write(&temp_path, json_text.as_bytes()).map_err(|e| AppError::io(&temp_path, e))?;
     fs::rename(&temp_path, auth_path).map_err(|e| AppError::io(auth_path, e))?;
 
-    info!(
-        "[CodexAuthSync] auth.json OPENAI_API_KEY 已同步为 DB（避免 Bug #3646）"
-    );
+    info!("[CodexAuthSync] auth.json OPENAI_API_KEY 已同步为 DB（避免 Bug #3646）");
 
     Ok(())
 }
@@ -246,7 +244,11 @@ mod tests {
     #[test]
     fn overwrites_stale_key() {
         let path = tmp_path("stale");
-        fs::write(&path, r#"{"OPENAI_API_KEY": "sk-old", "tokens": {"a": "b"}}"#).unwrap();
+        fs::write(
+            &path,
+            r#"{"OPENAI_API_KEY": "sk-old", "tokens": {"a": "b"}}"#,
+        )
+        .unwrap();
 
         sync_codex_auth_at_path(&path, "sk-new").unwrap();
 

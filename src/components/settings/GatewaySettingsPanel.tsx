@@ -124,7 +124,9 @@ export function GatewaySettingsPanel() {
           gatewayApi.getConfig(),
           Promise.all(
             GATEWAY_APPS.map((app) =>
-              providersApi.getAll(app as AppId).catch(() => ({}) as Record<string, Provider>),
+              providersApi
+                .getAll(app as AppId)
+                .catch(() => ({}) as Record<string, Provider>),
             ),
           ),
           proxyApi.getGlobalProxyConfig().catch(() => null),
@@ -176,23 +178,20 @@ export function GatewaySettingsPanel() {
     [t],
   );
 
-  const persist = useCallback(
-    async (next: GatewayConfig) => {
-      setIsSaving(true);
-      try {
-        await gatewayApi.saveConfig(next);
-        setConfig(next);
-        return true;
-      } catch (e) {
-        console.error("Failed to save gateway config:", e);
-        toast.error(String(e));
-        return false;
-      } finally {
-        setIsSaving(false);
-      }
-    },
-    [],
-  );
+  const persist = useCallback(async (next: GatewayConfig) => {
+    setIsSaving(true);
+    try {
+      await gatewayApi.saveConfig(next);
+      setConfig(next);
+      return true;
+    } catch (e) {
+      console.error("Failed to save gateway config:", e);
+      toast.error(String(e));
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  }, []);
 
   const handleToggleEnabled = useCallback(
     async (enabled: boolean) => {
@@ -364,7 +363,12 @@ export function GatewaySettingsPanel() {
 
   // 模型池按供应商分组展示
   const groupedSelected = useMemo(() => {
-    if (!config) return [] as Array<{ key: string; label: string; entries: GatewayModelEntry[] }>;
+    if (!config)
+      return [] as Array<{
+        key: string;
+        label: string;
+        entries: GatewayModelEntry[];
+      }>;
     const groups = new Map<string, GatewayModelEntry[]>();
     for (const m of config.models) {
       const gkey = `${m.appType}:${m.providerId}`;
@@ -441,9 +445,11 @@ export function GatewaySettingsPanel() {
           </Label>
           <div className="flex items-center gap-2">
             <code className="flex-1 rounded bg-background px-2 py-1.5 text-xs font-mono break-all">
-              {baseUrl ?? t("settings.advanced.gateway.baseUrlUnknown", {
-                defaultValue: "代理端口未配置，请先在代理设置中启用并配置端口",
-              })}
+              {baseUrl ??
+                t("settings.advanced.gateway.baseUrlUnknown", {
+                  defaultValue:
+                    "代理端口未配置，请先在代理设置中启用并配置端口",
+                })}
             </code>
             <Button
               variant="outline"
@@ -512,7 +518,11 @@ export function GatewaySettingsPanel() {
               {t("settings.advanced.gateway.modelPoolDescription")}
             </p>
           </div>
-          <Button size="sm" onClick={() => void handleSaveModels()} disabled={isSaving}>
+          <Button
+            size="sm"
+            onClick={() => void handleSaveModels()}
+            disabled={isSaving}
+          >
             {isSaving ? (
               <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
             ) : null}
@@ -547,9 +557,7 @@ export function GatewaySettingsPanel() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() =>
-                            void handleFetchModels(app, provider)
-                          }
+                          onClick={() => void handleFetchModels(app, provider)}
                           disabled={state.loading}
                         >
                           {state.loading ? (

@@ -219,8 +219,7 @@ export function useSetProtectUserLiveEdits() {
   const { t } = useTranslation();
 
   return useMutation({
-    mutationFn: (enabled: boolean) =>
-      proxyApi.setProtectUserLiveEdits(enabled),
+    mutationFn: (enabled: boolean) => proxyApi.setProtectUserLiveEdits(enabled),
     onSuccess: (_data, enabled) => {
       toast.success(
         enabled

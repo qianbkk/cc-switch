@@ -392,7 +392,9 @@ export function SettingsPage({
                                 {t("settings.advanced.claudePlugin.title")}
                               </h3>
                               <p className="text-sm text-muted-foreground font-normal">
-                                {t("settings.advanced.claudePlugin.description")}
+                                {t(
+                                  "settings.advanced.claudePlugin.description",
+                                )}
                               </p>
                             </div>
                           </div>
@@ -506,32 +508,32 @@ export function SettingsPage({
                       </AccordionItem>
 
                       {ENABLE_CLOUD_SYNC && (
-                      <AccordionItem
-                        value="cloudSync"
-                        className="rounded-xl glass-card overflow-hidden"
-                      >
-                        <AccordionTrigger className="px-6 py-4 hover:no-underline hover:bg-muted/50 data-[state=open]:bg-muted/50">
-                          <div className="flex items-center gap-3">
-                            <Cloud className="h-5 w-5 text-blue-500" />
-                            <div className="text-left">
-                              <h3 className="text-base font-semibold">
-                                {t("settings.advanced.cloudSync.title")}
-                              </h3>
-                              <p className="text-sm text-muted-foreground font-normal">
-                                {t("settings.advanced.cloudSync.description")}
-                              </p>
+                        <AccordionItem
+                          value="cloudSync"
+                          className="rounded-xl glass-card overflow-hidden"
+                        >
+                          <AccordionTrigger className="px-6 py-4 hover:no-underline hover:bg-muted/50 data-[state=open]:bg-muted/50">
+                            <div className="flex items-center gap-3">
+                              <Cloud className="h-5 w-5 text-blue-500" />
+                              <div className="text-left">
+                                <h3 className="text-base font-semibold">
+                                  {t("settings.advanced.cloudSync.title")}
+                                </h3>
+                                <p className="text-sm text-muted-foreground font-normal">
+                                  {t("settings.advanced.cloudSync.description")}
+                                </p>
+                              </div>
                             </div>
-                          </div>
-                        </AccordionTrigger>
-                        <AccordionContent className="px-6 pb-6 pt-4 border-t border-border/50">
-                          <WebdavSyncSection
-                            config={settings?.webdavSync}
-                            s3Config={settings?.s3Sync}
-                            settings={settings}
-                            onAutoSave={handleAutoSave}
-                          />
-                        </AccordionContent>
-                      </AccordionItem>
+                          </AccordionTrigger>
+                          <AccordionContent className="px-6 pb-6 pt-4 border-t border-border/50">
+                            <WebdavSyncSection
+                              config={settings?.webdavSync}
+                              s3Config={settings?.s3Sync}
+                              settings={settings}
+                              onAutoSave={handleAutoSave}
+                            />
+                          </AccordionContent>
+                        </AccordionItem>
                       )}
 
                       <AccordionItem

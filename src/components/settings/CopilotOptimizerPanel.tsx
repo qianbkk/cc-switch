@@ -5,10 +5,7 @@ import { Loader2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import {
-  copilotOptimizerApi,
-  type CopilotOptimizerConfig,
-} from "@/lib/api";
+import { copilotOptimizerApi, type CopilotOptimizerConfig } from "@/lib/api";
 
 /** 布尔开关字段（warmupModel 单独处理） */
 const TOGGLE_FIELDS: Array<keyof CopilotOptimizerConfig> = [
@@ -112,7 +109,9 @@ export function CopilotOptimizerPanel() {
         <Input
           value={config.warmupModel}
           disabled={!enabled || !config.warmupDowngrade}
-          onChange={(e) => setConfig({ ...config, warmupModel: e.target.value })}
+          onChange={(e) =>
+            setConfig({ ...config, warmupModel: e.target.value })
+          }
           onBlur={() => {
             const committed = lastSavedRef.current?.warmupModel;
             if (committed !== config.warmupModel) {

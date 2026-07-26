@@ -301,9 +301,8 @@ export function ProxyPanel({
             {(["claude", "codex", "gemini", "grokbuild"] as const).map(
               (appType) => {
                 const isEnabled =
-                  takeoverStatus?.[
-                    appType as keyof typeof takeoverStatus
-                  ] ?? false;
+                  takeoverStatus?.[appType as keyof typeof takeoverStatus] ??
+                  false;
                 return (
                   <div
                     key={appType}
@@ -317,10 +316,7 @@ export function ProxyPanel({
                       onCheckedChange={(checked) =>
                         handleTakeoverChange(appType, checked)
                       }
-                      disabled={
-                        setTakeoverForApp.isPending ||
-                        !isRunning
-                      }
+                      disabled={setTakeoverForApp.isPending || !isRunning}
                     />
                   </div>
                 );
@@ -350,9 +346,7 @@ export function ProxyPanel({
             </div>
             <Switch
               checked={protectEnabled ?? true}
-              onCheckedChange={(checked) =>
-                setProtectEnabled.mutate(checked)
-              }
+              onCheckedChange={(checked) => setProtectEnabled.mutate(checked)}
               disabled={setProtectEnabled.isPending}
             />
           </div>
