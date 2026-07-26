@@ -57,7 +57,10 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ''
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ''
         run: |
-          pnpm tauri build --target x86_64-pc-windows-msvc --bundles zip
+          # Tauri 2.x --bundles 仅接受 msi/nsis(zip 是我们在下游打的)。
+          # 用 CSC_IDENTITY_AUTO_DISCOVERY=false 让 msi 构建被跳过(无 Windows 代码证书),
+          # 后续步骤从 target/release/cc-switch.exe 自行打 portable.zip。
+          pnpm tauri build --target x86_64-pc-windows-msvc --bundles none
 
       - name: Package portable zip
         shell: pwsh
