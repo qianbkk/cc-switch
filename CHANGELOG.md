@@ -1,5 +1,7 @@
 # Changelog
 
+> 🔧 **本仓库是 [farion1231/cc-switch](https://github.com/farion1231/cc-switch) 的个人魔改 fork**,CHANGELOG 与上游同步滚动,完整变更记录请看 [上游 release notes](https://github.com/farion1231/cc-switch/releases)。魔改专属变更记录在 [docs/CUSTOM_FORK_PLAN.md](docs/CUSTOM_FORK_PLAN.md) §10。
+
 All notable changes to CC Switch will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
