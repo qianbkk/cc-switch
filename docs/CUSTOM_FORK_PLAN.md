@@ -1,7 +1,7 @@
 # CC Switch 魔改版 — 总体规划与执行状态
 
-> 本文档是本地魔改版（`custom` 分支）的唯一规划文档，供后续会话/开发接续执行。
-> 最近更新：2026-07-26（合入上游 v3.18.0，Schema v18）
+> 本文档是本地魔改版（`main` 分支，原 custom 分支）的唯一规划文档，供后续会话/开发接续执行。
+> 最近更新：2026-07-26（合入上游 v3.18.0，Schema v18；分支重命名 custom→main）
 
 ---
 
@@ -16,18 +16,20 @@
 | 项 | 值 |
 |---|---|
 | 本地路径 | `/d/AI/A_shared_workspace/ccswitch-issue/cc-switch` |
-| remote | `upstream` → github.com/farion1231/cc-switch |
-| `main` 分支 | 干净跟踪上游，**永不直接改动** |
-| `custom` 分支 | 所有魔改在此进行 |
+| remote `origin` | github.com/qianbkk/cc-switch（本 fork） |
+| remote `upstream` | github.com/farion1231/cc-switch（原仓库） |
+| 本地 `main` 分支 | **魔改主分支**，GitHub 默认分支，daily 工作区 |
+| 本地 `upstream` 分支 | 上游镜像，跟 `farion1231/main` 同步，**永不直接改动** |
+| 旧 `custom` 分支 | 2026-07-26 已合并/重命名为 main |
 
-跟进上游流程：`git fetch upstream` → `main` 上 `git merge upstream/main` → `custom` 上 `git merge main`，冲突集中在少数枢纽文件（lib.rs、commands/mod.rs、SettingsPage.tsx、server.rs）。
+跟进上游流程：`bash scripts/sync-upstream.sh` 会自动 git fetch → `upstream` 上 merge upstream/main → `main` 上 merge upstream，冲突集中在少数枢纽文件（lib.rs、commands/mod.rs、SettingsPage.tsx、server.rs）。
 
 ## 3. 魔改原则（务必遵守）
 
 1. **尽量新增文件，少改公共文件**——新功能放独立新模块/新组件。
 2. 隐藏官方功能一律走 `src/config/featureFlags.ts` 的开关，**不删后端代码**。
 3. 前端新 API 封装放 `src/lib/api/` 独立新文件；后端新 command 放 `commands/` 新文件。
-4. 不动 `main` 分支；`custom` 上提交信息用中文说明意图。
+4. 不动 `upstream` 分支；`main` 上提交信息用中文说明意图。
 
 ## 4. 已完成改动（custom 分支 commit 历史）
 
@@ -209,7 +211,8 @@
 **发布命令**：
 
 ```bash
-# 在 custom 分支上、状态干净时
+# 在 main 分支(魔改主分支)上、状态干净时
+git checkout main
 git tag custom-v3.18.0-1
 git push origin custom-v3.18.0-1
 ```

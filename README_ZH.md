@@ -2,7 +2,7 @@
 
 # CC Switch(魔改版)
 
-> 🔧 这是 [farion1231/cc-switch](https://github.com/farion1231/cc-switch) 的个人魔改分支(custom 分支 + 4 块独家功能)。本页与上游原版同步,仅作翻译参考;魔改内容说明请看 [README.md](README.md)。**非上游官方分支**,有问题请到本仓库 [qianbkk/cc-switch](https://github.com/qianbkk/cc-switch) 反馈。
+> 🔧 这是 [farion1231/cc-switch](https://github.com/farion1231/cc-switch) 的个人魔改分支(main 分支 + 4 块独家功能)。本页与上游原版同步,仅作翻译参考;魔改内容说明请看 [README.md](README.md)。**非上游官方分支**,有问题请到本仓库 [qianbkk/cc-switch](https://github.com/qianbkk/cc-switch) 反馈。
 >
 > 同步上游:[farion1231/cc-switch](https://github.com/farion1231/cc-switch) | 魔改说明:[README.md](README.md) | 规划文档:[docs/CUSTOM_FORK_PLAN.md](docs/CUSTOM_FORK_PLAN.md)
 

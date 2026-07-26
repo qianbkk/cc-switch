@@ -2,7 +2,7 @@
 
 # CC Switch(魔改版 / 改変版)
 
-> 🔧 これは [farion1231/cc-switch](https://github.com/farion1231/cc-switch) の個人改変フォーク(custom ブランチ + 4 つの独自機能)です。原文と同期していますが、翻訳版は参考用です。改変内容は [README.md](README.md) を参照してください。**公式フォークではありません**。問題があれば本リポジトリ [qianbkk/cc-switch](https://github.com/qianbkk/cc-switch) まで。
+> 🔧 これは [farion1231/cc-switch](https://github.com/farion1231/cc-switch) の個人改変フォーク(main ブランチ + 4 つの独自機能)です。原文と同期していますが、翻訳版は参考用です。改変内容は [README.md](README.md) を参照してください。**公式フォークではありません**。問題があれば本リポジトリ [qianbkk/cc-switch](https://github.com/qianbkk/cc-switch) まで。
 >
 > アップストリーム:[farion1231/cc-switch](https://github.com/farion1231/cc-switch) | 改変説明:[README.md](README.md) | 設計文档:[docs/CUSTOM_FORK_PLAN.md](docs/CUSTOM_FORK_PLAN.md)
 

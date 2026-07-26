@@ -128,7 +128,7 @@ jobs:
 
             ### 配套说明
 
-            - 部署文档：[docs/CUSTOM_FORK_PLAN.md](https://github.com/qianbkk/cc-switch/blob/custom/docs/CUSTOM_FORK_PLAN.md)
+            - 部署文档：[docs/CUSTOM_FORK_PLAN.md](https://github.com/qianbkk/cc-switch/blob/main/docs/CUSTOM_FORK_PLAN.md)
             - 同步上游工具：`scripts/sync-upstream.sh`
           files: |
             release-assets/CC-Switch-${{ github.ref_name }}-Windows-Portable.zip

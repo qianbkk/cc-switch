@@ -2,7 +2,7 @@
 
 # CC Switch (魔改版 / Modifizierte Version)
 
-> 🔧 Dies ist ein persönlicher modifizierter Fork von [farion1231/cc-switch](https://github.com/farion1231/cc-switch) (Branch `custom`, 4 eigene Funktionen). Diese Übersetzung wird mit dem Original synchronisiert, dient aber nur als Referenz. Änderungen siehe [README.md](README.md). **Kein offizieller Fork.** Bei Problemen bitte dieses Repository [qianbkk/cc-switch](https://github.com/qianbkk/cc-switch) nutzen.
+> 🔧 Dies ist ein persönlicher modifizierter Fork von [farion1231/cc-switch](https://github.com/farion1231/cc-switch) (Branch `main`, 4 eigene Funktionen). Diese Übersetzung wird mit dem Original synchronisiert, dient aber nur als Referenz. Änderungen siehe [README.md](README.md). **Kein offizieller Fork.** Bei Problemen bitte dieses Repository [qianbkk/cc-switch](https://github.com/qianbkk/cc-switch) nutzen.
 >
 > Upstream: [farion1231/cc-switch](https://github.com/farion1231/cc-switch) | Änderungen: [README.md](README.md) | Plan: [docs/CUSTOM_FORK_PLAN.md](docs/CUSTOM_FORK_PLAN.md)
 
