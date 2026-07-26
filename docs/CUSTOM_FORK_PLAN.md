@@ -249,10 +249,23 @@ GitHub Actions 自动 build → 8-15 分钟 → 在 [Releases 页](https://githu
 | `SUPPORT.md` | 顶部加 fork 横幅 | 引导：怀疑魔改导致的先关总开关自测 |
 | `CONTRIBUTING.md` | 顶部加 fork 横幅 | 引导：改进产品本身请提给上游，魔改部分才提这里 |
 | `.github/workflows/stale.yml` | 注释掉 cron | 个人 fork 的 issue 很少，不该被机器人每天自动关 |
-| `.github/workflows/claude.yml` | step 级加 secret 判空 | fork 没有 `CLAUDE_CODE_OAUTH_TOKEN`，缺了会红；判空后跳过，配上自动生效 |
+| `.github/workflows/claude.yml` | job 级 env 中转 + step 级判空 | fork 没有 `CLAUDE_CODE_OAUTH_TOKEN`，缺了会红；判空后跳过，配上自动生效 |
 
-**注意**：`secrets` 上下文在 **job 级 `if`** 里不可用（只支持 github/needs/vars/inputs），
-守卫必须写在 **step 级 `if`**，否则整个 workflow 会语法报错。
+**踩过的坑**：`secrets` 上下文在 **job 级 `if` 和 step 级 `if` 里都不可用**。
+直接写 `if: secrets.X != ''` 会让整个 workflow 文件语法失效——GitHub 会在
+每次 push 时生成一条 event=push 的失败记录（workflow 名显示成文件路径，就是这个症状）。
+正确写法是先在 job 级 `env` 里中转：
+
+```yaml
+jobs:
+  claude:
+    env:
+      HAS_CLAUDE_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+    steps:
+      - if: env.HAS_CLAUDE_TOKEN == 'true'
+```
+
+`env` 才是 step 级 `if` 支持的上下文。
 
 **维护提醒**：这些文件被改过，未来 `sync-upstream.sh` 合并上游时可能冲突。
 冲突时的处理原则是**保留 fork 侧的身份信息**（CODEOWNERS 的 @qianbkk、各横幅），
