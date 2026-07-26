@@ -1,0 +1,129 @@
+# release-portable.yml — 魔改版专用 release:只产 Windows Portable.zip(绿色版)
+#
+# 与上游 release.yml 互不干扰:
+#   - 上游 release.yml 在 push v* tag 时跑完整 5 平台矩阵 + Apple/Windows 签名
+#   - 此 workflow 在 push custom-* tag 时只跑 Windows Portable.zip(免安装、无需签名证书)
+#
+# 用法:
+#   git tag custom-v3.18.0-1
+#   git push origin custom-v3.18.0-1
+# 完成后到 https://github.com/qianbkk/cc-switch/releases 下载 zip
+
+name: Release Portable (Windows)
+
+on:
+  push:
+    tags:
+      - 'custom-*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-portable-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  portable:
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        shell: pwsh
+        run: |
+          npm install -g pnpm@10
+          pnpm --version
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install frontend deps
+        shell: pwsh
+        run: pnpm install --frozen-lockfile
+
+      - name: Build portable (zip only, no signing)
+        shell: pwsh
+        env:
+          # 跳过 Windows 代码签名检查 — 我们只产绿色 zip,免安装,不需要 EV 证书
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          TAURI_SIGNING_PRIVATE_KEY: ''
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ''
+        run: |
+          pnpm tauri build --target x86_64-pc-windows-msvc --bundles zip
+
+      - name: Package portable zip
+        shell: pwsh
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path release-assets | Out-Null
+
+          # 找 cc-switch.exe(默认 release target 路径)
+          $exeCandidates = @(
+            'src-tauri/target/x86_64-pc-windows-msvc/release/cc-switch.exe',
+            'src-tauri/target/release/cc-switch.exe'
+          )
+          $exePath = $exeCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if ($null -eq $exePath) {
+            throw 'cc-switch.exe not found after build'
+          }
+
+          $portableDir = 'release-assets/CC-Switch-Portable'
+          New-Item -ItemType Directory -Force -Path $portableDir | Out-Null
+          Copy-Item $exePath $portableDir
+
+          $portableIniPath = Join-Path $portableDir 'portable.ini'
+          @(
+            '# CC Switch portable build (魔改版)',
+            'portable=true'
+          ) | Set-Content -Path $portableIniPath -Encoding UTF8
+
+          $portableZip = "release-assets/CC-Switch-$env:VERSION-Windows-Portable.zip"
+          Compress-Archive -Path "$portableDir/*" -DestinationPath $portableZip -Force
+          Remove-Item -Recurse -Force $portableDir
+
+          Write-Host "✅ Portable zip created: $portableZip"
+          Get-ChildItem release-assets | Format-Table Name, Length
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: CC Switch 魔改版 ${{ github.ref_name }}
+          draft: false
+          prerelease: true
+          generate_release_notes: false
+          body: |
+            ## CC Switch 魔改版
+
+            这是 [farion1231/cc-switch](https://github.com/farion1231/cc-switch) 的个人魔改分支。
+            基于 v3.18.0 上游合入 + 4 块独占功能（统一网关 / Live 配置保护 / Codex auth 纠正 / 3 个隐藏功能 UI）。
+
+            ### 下载
+
+            **Windows 绿色版**（解压双击 CC Switch.exe 即用，无需安装）：
+
+            - `CC-Switch-${{ github.ref_name }}-Windows-Portable.zip`
+
+            ### 已知差异（vs 上游发布版）
+
+            - 已剔除上游赞助商推广位（README 段）
+            - 已隐藏云同步设置入口（代码保留）
+            - 已合入 v3.18.0 上游全部功能 + 4 个合并冲突修复
+
+            ### 配套说明
+
+            - 部署文档：[docs/CUSTOM_FORK_PLAN.md](https://github.com/qianbkk/cc-switch/blob/custom/docs/CUSTOM_FORK_PLAN.md)
+            - 同步上游工具：`scripts/sync-upstream.sh`
+          files: |
+            release-assets/CC-Switch-${{ github.ref_name }}-Windows-Portable.zip
+          fail_on_unmatched_files: true

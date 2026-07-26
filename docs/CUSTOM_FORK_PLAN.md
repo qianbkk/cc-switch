@@ -194,6 +194,34 @@
 | Live 配置保护 | `src-tauri/src/live_protection.rs` |
 | 写入器（全量替换） | `src-tauri/src/config.rs:274-344`（atomic_write） |
 
+## 9.5. Release 流程（魔改版专用）
+
+**目标**：在自己的 fork 仓库 `qianbkk/cc-switch` 发布 Windows 绿色版（Portable.zip），无需代码签名证书，给自己和朋友用即可。
+
+**为什么不复用上游 `release.yml`**：上游在 push `v*` tag 时跑完整 5 平台矩阵 + Apple/Windows 签名 + Tauri signing key，硬编码依赖 GitHub Secrets，没配就会失败。
+
+**专用 workflow**：`.github/workflows/release-portable.yml`
+- **trigger**: push tag 匹配 `custom-*` （如 `custom-v3.18.0-1`、`custom-v3.18.0-2`...，避免和未来上游 v3.x tag 冲突）
+- **runner**: 单机 `windows-2022`
+- **产物**: `CC-Switch-{tag}-Windows-Portable.zip`（仅可执行 exe + `portable.ini` 标记）
+- **不签**: 跳过 `.msi` 安装器、Apple notarization、Tauri signing key；用环境变量 `CSC_IDENTITY_AUTO_DISCOVERY=false` 阻止 Tauri 找证书
+
+**发布命令**：
+
+```bash
+# 在 custom 分支上、状态干净时
+git tag custom-v3.18.0-1
+git push origin custom-v3.18.0-1
+```
+
+GitHub Actions 自动 build → 8-15 分钟 → 在 [Releases 页](https://github.com/qianbkk/cc-switch/releases) 生成 pre-release → 下载 Portable.zip 解压双击 `CC Switch.exe` 即可。
+
+**版本号策略**：`Cargo.toml` / `package.json` / `tauri.conf.json` 保持 `3.18.0` 不变；魔改版版本号走 **tag 后缀**（`-1`、`-2`...）—— 这样永远跟上游版本对齐，避免合并后产生版本号分歧需要回填。
+
+**Fork Actions 启用**：Settings → Actions → General → "Allow all actions and reusable workflows"（默认 fork 是关闭的）。
+
+**配额**：GitHub 每月免费 2000 分钟，单次 Windows build 约 8-15 分钟（首次拉依赖 ~20 分钟），足够个人使用。
+
 ## 10. 上游同步日志
 
 ### 2026-07-26 合入上游 v3.18.0（878c26f3）
