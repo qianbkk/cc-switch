@@ -11,7 +11,8 @@ CLAUDE.md
 AGENTS.md
 GEMINI.md
 /.claude
-/release-assets/    # 本地构建产物:cc-switch.exe + zip,不上 git
+# 本地构建产物:cc-switch.exe + zip,不上 git
+/release-assets/
 /.codex
 /.gemini
 /.cc-switch

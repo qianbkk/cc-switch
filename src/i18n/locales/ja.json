@@ -869,6 +869,8 @@
     "checkUpdateFailed": "更新の確認に失敗しました。時間をおいて再試行してください。",
     "openReleaseNotesFailed": "リリースノートの表示に失敗しました",
     "releaseNotes": "リリースノート",
+    "forkChanges": "改造版の詳細",
+    "openForkChangesFailed": "改造版の詳細を開けませんでした",
     "viewReleaseNotes": "このバージョンのリリースノートを見る",
     "viewCurrentReleaseNotes": "現在のバージョンのリリースノートを見る",
     "officialWebsite": "公式サイト",

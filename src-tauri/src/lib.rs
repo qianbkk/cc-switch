@@ -1329,6 +1329,7 @@ pub fn run() {
             commands::open_config_folder,
             commands::pick_directory,
             commands::open_external,
+            commands::open_fork_changes_html,
             commands::get_init_error,
             commands::get_migration_result,
             commands::get_skills_migration_result,

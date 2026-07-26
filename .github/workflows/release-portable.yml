@@ -55,9 +55,13 @@ jobs:
         shell: pwsh
         run: pnpm install --frozen-lockfile
 
-      - name: Build frontend (vite, before Tauri bundles it)
+      - name: Build frontend (vite only)
         shell: pwsh
-        run: pnpm build
+        # 必须用 build:renderer(= vite build)，不能用 pnpm build——
+        # package.json 里 build = `tauri build`，会走完整打包流程，
+        # 而 tauri.conf.json 开了 createUpdaterArtifacts + 配了 updater pubkey，
+        # 打包阶段会要求 TAURI_SIGNING_PRIVATE_KEY，fork 没有这个 secret 必然失败。
+        run: pnpm build:renderer
 
       - name: Build Tauri app (exe only, no installers)
         shell: pwsh

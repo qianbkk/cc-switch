@@ -1,6 +1,7 @@
 #![allow(non_snake_case)]
 
 use crate::app_config::AppType;
+use crate::error::AppError;
 use crate::init_status::{InitErrorPayload, SkillsMigrationPayload};
 use crate::services::ProviderService;
 use once_cell::sync::Lazy;
@@ -32,6 +33,42 @@ pub async fn open_external(app: AppHandle, url: String) -> Result<bool, String> 
         .map_err(|e| format!("打开链接失败: {e}"))?;
 
     Ok(true)
+}
+
+/// 魔改说明 HTML，编译期嵌入二进制，保证与当前版本严格一致
+const FORK_CHANGES_HTML: &str = include_str!("../../assets/FORK_CHANGES.html");
+
+/// 把嵌入的魔改说明 HTML 释放到临时文件，并用系统默认浏览器打开。
+///
+/// HTML 通过 `include_str!` 在编译期嵌入二进制：发布流程用 `cargo build --release`
+/// 直接编译、跳过 Tauri bundler，`bundle.resources` 不会生效，绿色版 zip 里也没有
+/// 资源目录，因此不能依赖 `resource_dir()`。这里把内容释放到带版本号的固定临时
+/// 文件——路径稳定，内容已一致时不重复写盘。
+///
+/// 打开动作放在后端而非前端：`open_external` 只接受 http(s) URL（非 http 开头会被
+/// 强制加 `https://` 前缀），无法用于本地文件路径。
+#[tauri::command]
+pub fn open_fork_changes_html(app: AppHandle) -> Result<String, AppError> {
+    let path = std::env::temp_dir().join(format!(
+        "cc-switch-fork-changes-{}.html",
+        env!("CARGO_PKG_VERSION")
+    ));
+
+    let up_to_date = std::fs::read_to_string(&path)
+        .map(|existing| existing == FORK_CHANGES_HTML)
+        .unwrap_or(false);
+
+    if !up_to_date {
+        std::fs::write(&path, FORK_CHANGES_HTML).map_err(|e| {
+            AppError::Message(format!("写入魔改说明文件失败: {} ({e})", path.display()))
+        })?;
+    }
+
+    app.opener()
+        .open_path(path.to_string_lossy(), None::<String>)
+        .map_err(|e| AppError::Message(format!("打开魔改说明失败: {} ({e})", path.display())))?;
+
+    Ok(path.to_string_lossy().into_owned())
 }
 
 #[tauri::command]

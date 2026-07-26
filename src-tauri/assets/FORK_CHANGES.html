@@ -1,0 +1,1120 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CC Switch 魔改版 — 相对原版改了什么</title>
+    <style>
+      :root {
+        --bg: #fafbfc;
+        --card: #ffffff;
+        --border: #e2e6ea;
+        --ink: #1f2329;
+        --ink2: #57606a;
+        --accent: #2f6feb;
+        --good: #1f883d;
+        --warn: #bf8700;
+        --bad: #cf222e;
+        --code-bg: #f6f8fa;
+        --tag-good: #dafbe1;
+        --tag-warn: #fff8c5;
+        --tag-bad: #ffebe9;
+        --tag-accent: #ddf4ff;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 40px 20px;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+        font-size: 17px;
+        line-height: 1.7;
+        color: var(--ink);
+        background: var(--bg);
+      }
+      .wrap {
+        max-width: 880px;
+        margin: 0 auto;
+      }
+      header {
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 24px;
+      }
+      header h1 {
+        font-size: 28px;
+        margin: 0 0 10px;
+        line-height: 1.35;
+      }
+      header .sub {
+        margin: 0 0 14px;
+        color: var(--ink2);
+        font-size: 18px;
+      }
+      h2 {
+        font-size: 24px;
+        margin: 46px 0 16px;
+        padding-left: 12px;
+        border-left: 4px solid var(--accent);
+        line-height: 1.35;
+      }
+      h3 {
+        font-size: 18px;
+        margin: 22px 0 8px;
+      }
+      p {
+        margin: 10px 0;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 18px 20px;
+        margin: 14px 0;
+      }
+      .card.accent {
+        border-left: 4px solid var(--accent);
+      }
+      .card h3 {
+        margin-top: 0;
+      }
+      .label {
+        display: inline-block;
+        padding: 2px 10px;
+        border-radius: 12px;
+        font-size: 13px;
+        font-weight: 600;
+        margin-right: 8px;
+        vertical-align: middle;
+      }
+      .tag-good {
+        background: var(--tag-good);
+        color: var(--good);
+      }
+      .tag-warn {
+        background: var(--tag-warn);
+        color: var(--warn);
+      }
+      .tag-bad {
+        background: var(--tag-bad);
+        color: var(--bad);
+      }
+      .tag-accent {
+        background: var(--tag-accent);
+        color: var(--accent);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 14px 0;
+        font-size: 15px;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border);
+        vertical-align: top;
+      }
+      th {
+        background: var(--code-bg);
+        font-weight: 600;
+      }
+      code {
+        background: var(--code-bg);
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 14px;
+      }
+      pre {
+        background: var(--code-bg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 14px 16px;
+        overflow-x: auto;
+        font-size: 14px;
+        line-height: 1.6;
+        margin: 12px 0;
+      }
+      pre code {
+        background: none;
+        padding: 0;
+        font-size: 14px;
+      }
+      ul,
+      ol {
+        margin: 8px 0;
+        padding-left: 24px;
+      }
+      li {
+        margin: 5px 0;
+      }
+      .muted {
+        color: var(--ink2);
+      }
+      .small {
+        font-size: 15px;
+      }
+      .stats {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin: 18px 0;
+      }
+      .stat {
+        flex: 1 1 180px;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-top: 3px solid var(--accent);
+        border-radius: 10px;
+        padding: 16px 18px;
+        text-align: center;
+      }
+      .stat .num {
+        font-size: 32px;
+        font-weight: 700;
+        color: var(--accent);
+        line-height: 1.2;
+      }
+      .stat .num.good {
+        color: var(--good);
+      }
+      .stat .num.warn {
+        color: var(--warn);
+      }
+      .stat .cap {
+        font-size: 14px;
+        color: var(--ink2);
+        margin-top: 4px;
+      }
+      .vs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin: 14px 0;
+      }
+      .vs > div {
+        flex: 1 1 260px;
+        border-radius: 8px;
+        padding: 12px 14px;
+        font-size: 15px;
+        border: 1px solid var(--border);
+      }
+      .vs .before {
+        background: var(--tag-bad);
+        border-color: #ffcecb;
+      }
+      .vs .after {
+        background: var(--tag-good);
+        border-color: #b6e8c2;
+      }
+      .vs .t {
+        font-weight: 700;
+        display: block;
+        margin-bottom: 4px;
+        font-size: 14px;
+      }
+      .vs .before .t {
+        color: var(--bad);
+      }
+      .vs .after .t {
+        color: var(--good);
+      }
+      .analogy {
+        background: var(--tag-warn);
+        border-left: 4px solid var(--warn);
+        border-radius: 0 8px 8px 0;
+        padding: 10px 14px;
+        margin: 14px 0;
+        font-size: 15px;
+      }
+      .analogy b {
+        color: var(--warn);
+      }
+      details {
+        margin: 14px 0;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px 14px;
+        background: var(--code-bg);
+      }
+      summary {
+        cursor: pointer;
+        color: var(--accent);
+        font-weight: 600;
+        font-size: 15px;
+      }
+      details[open] summary {
+        margin-bottom: 8px;
+      }
+      details .small {
+        font-size: 14.5px;
+      }
+      .timeline {
+        position: relative;
+        margin: 20px 0 0 8px;
+        padding-left: 28px;
+      }
+      .timeline::before {
+        content: "";
+        position: absolute;
+        left: 5px;
+        top: 6px;
+        bottom: 6px;
+        width: 2px;
+        background: var(--border);
+      }
+      .tl-item {
+        position: relative;
+        margin-bottom: 22px;
+      }
+      .tl-item::before {
+        content: "";
+        position: absolute;
+        left: -28px;
+        top: 7px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: var(--accent);
+        border: 2px solid var(--bg);
+      }
+      .tl-item.up::before {
+        background: var(--ink2);
+      }
+      .tl-item.now::before {
+        background: var(--good);
+      }
+      .tl-date {
+        font-size: 13px;
+        color: var(--ink2);
+        font-weight: 600;
+        letter-spacing: 0.3px;
+      }
+      .tl-title {
+        font-weight: 700;
+        font-size: 16.5px;
+        margin: 2px 0 3px;
+      }
+      .tl-body {
+        font-size: 15px;
+        color: var(--ink2);
+      }
+      .note {
+        background: var(--tag-accent);
+        border-left: 4px solid var(--accent);
+        border-radius: 0 8px 8px 0;
+        padding: 10px 14px;
+        margin: 14px 0;
+        font-size: 15px;
+      }
+      footer {
+        color: var(--ink2);
+        font-size: 14.5px;
+        margin-top: 52px;
+        padding-top: 24px;
+        border-top: 1px solid var(--border);
+        text-align: center;
+      }
+      footer a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+      footer a:hover {
+        text-decoration: underline;
+      }
+      @media (max-width: 640px) {
+        body {
+          padding: 24px 14px;
+          font-size: 16px;
+        }
+        header h1 {
+          font-size: 23px;
+        }
+        h2 {
+          font-size: 21px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <h1>CC Switch 魔改版 — 相对原版到底改了什么</h1>
+        <p class="sub">
+          你手上这个 CC Switch 是 <b>qianbkk</b> 的<b>个人魔改版</b>，<b
+            >不是</b
+          >
+          farion1231 发布的官方原版。
+        </p>
+        <p class="small muted">
+          当前上游基线：官方 <code>v3.18.0</code>，已同步到官方最新提交
+          <code>b0482320</code
+          >（2026-07-26）。原版的功能一个没删（除了赞助商推广区）， 在此之上多了
+          4 块自己加的东西。本页面向不写代码的人，术语第一次出现都会当场解释。
+        </p>
+      </header>
+
+      <h2>1. 一张全景图：改了多少、改在哪</h2>
+
+      <div class="stats">
+        <div class="stat">
+          <div class="num">26</div>
+          <div class="cap">魔改版独有的提交<br />（原版没有的改动记录）</div>
+        </div>
+        <div class="stat">
+          <div class="num">53</div>
+          <div class="cap">被碰过的文件<br />（新增 18 + 修改 35）</div>
+        </div>
+        <div class="stat">
+          <div class="num good">+5499</div>
+          <div class="cap">新增代码行</div>
+        </div>
+        <div class="stat">
+          <div class="num warn">−626</div>
+          <div class="cap">删除代码行<br />（几乎全是 README 赞助区）</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <p>
+          <b>这些数字怎么读：</b>「删除 626 行」听起来很多，但其中
+          <b>459 行来自 README.md 一个文件</b>——那是原版首页里 28
+          段赞助商广告文案。也就是说，
+          <b>魔改版几乎没有删掉任何原版功能代码</b
+          >，绝大部分工作是<b>往上加</b>。
+        </p>
+        <p>加的部分大致对半开：</p>
+        <ul>
+          <li>
+            <b>后端（Rust，程序的"发动机"）</b>：22 个文件，
+            <span class="good">+2591</span> 行 −57 行
+          </li>
+          <li>
+            <b>前端（界面，你点的按钮）</b>：18 个文件，
+            <span class="good">+1849</span> 行 −95 行
+          </li>
+          <li>其余是文档、打包脚本、同步上游用的工具脚本</li>
+        </ul>
+        <p class="muted small">
+          没有任何文件被整个删除（<code>git</code> 统计里删除文件数为 0）。
+        </p>
+      </div>
+
+      <div class="note">
+        <b>魔改的三条自律原则</b>（写在
+        <code>docs/CUSTOM_FORK_PLAN.md</code> 里）：<br />
+        ① 能新建文件就不改原版文件，把冲突降到最低；<br />
+        ②
+        想隐藏的原版功能只关掉入口开关，<b>后端代码一行不删</b>，随时能开回来；<br />
+        ③
+        永远保持能一键从官方拉更新（<code>scripts/sync-upstream.sh</code>）。<br />
+        这三条的目的只有一个：<b
+          >让魔改版能长期跟着官方走，而不是变成一个再也追不上的老版本。</b
+        >
+      </div>
+
+      <h2>2. 魔改版独有的 4 大功能</h2>
+
+      <!-- ============ 功能 1 ============ -->
+      <div class="card accent">
+        <h3>
+          <span class="label tag-accent">功能 1</span>统一网关
+          <code>/gateway/*</code>
+        </h3>
+        <p>
+          <b>一句话：</b>把你在 CC Switch 里配好的所有 AI 供应商， 打包成<b
+            >一个统一的接口地址 + 一把统一的钥匙</b
+          >， 任何支持 OpenAI 格式的软件配一次就能调用它们全部。
+        </p>
+
+        <div class="vs">
+          <div class="before">
+            <span class="t">原版怎样</span>
+            代理（proxy）是"一个应用配一套"。Claude Code 走 Claude 的通道，
+            Codex 走 Codex 的通道。想让第三方工具或自己写的脚本用上这些供应商？
+            得自己去翻每家的地址和密钥，挨个填。
+          </div>
+          <div class="after">
+            <span class="t">魔改版怎样</span>
+            多了一组 <code>/gateway/*</code> 地址。你在界面里勾选想暴露的
+            「供应商 + 模型」组合，系统给每个组合起一个短名字（叫
+            alias，别名）。 之后任何客户端只填<b
+              >一个地址 + 一把 ccs- 开头的钥匙</b
+            >， 靠填不同的模型名就能切换到不同供应商。
+          </div>
+        </div>
+
+        <div class="analogy">
+          <b>类比：</b
+          >原版像是你钱包里塞了十张不同银行的卡，取钱前得先想清楚"这台 ATM
+          认哪张"。 统一网关相当于办了一张聚合卡：插卡的动作永远一样，
+          只要在屏幕上选一下"这笔走哪家"就行。
+        </div>
+
+        <details>
+          <summary>展开技术细节</summary>
+          <div class="small">
+            <p>
+              核心代码在 <code>src-tauri/src/proxy/gateway.rs</code>（813 行）。
+            </p>
+            <p><b>四个入口：</b></p>
+            <table>
+              <tr>
+                <th>地址</th>
+                <th>说的是哪种"方言"</th>
+              </tr>
+              <tr>
+                <td><code>POST /gateway/v1/messages</code></td>
+                <td>Anthropic Messages 格式（Claude 家的说法）</td>
+              </tr>
+              <tr>
+                <td><code>POST /gateway/v1/chat/completions</code></td>
+                <td>OpenAI Chat 格式（业界最通用的那种）</td>
+              </tr>
+              <tr>
+                <td><code>POST /gateway/v1/responses</code></td>
+                <td>OpenAI Responses 格式（Codex 用的新格式）</td>
+              </tr>
+              <tr>
+                <td><code>GET /gateway/v1/models</code></td>
+                <td>列出你勾选了哪些别名（客户端下拉框会读它）</td>
+              </tr>
+            </table>
+            <p>
+              <b>身份验证：</b>请求头带
+              <code>Authorization: Bearer &lt;key&gt;</code> 或
+              <code>x-api-key: &lt;key&gt;</code
+              >。钥匙是首次打开面板时自动生成的 <code>ccs-</code> 前缀 + 48
+              位十六进制字符，可以随时在界面上一键重置。 没带钥匙或钥匙错了返回
+              <b>401</b>；网关开关没打开返回 <b>403</b>； 模型别名写错了返回
+              <b>400</b>，并且<b>把当前可用的别名列表一并告诉你</b>，
+              不用你去猜。
+            </p>
+            <p>
+              <b>协议转换（最麻烦的一块）：</b>3 种入站方言 × 4 种上游方言 = 12
+              种组合。 没有硬写 12 套转换器，而是借鉴业界做法用「中转站」思路：
+              先把上游返回统一翻译成 Anthropic
+              格式做中间表示，再翻译成客户端要的格式。 原版本来就有 3
+              个转换器（OpenAI→Anthropic、Responses→Anthropic、Gemini→Anthropic），
+              魔改版只补了缺失的 Anthropic→Chat 这一环 （新文件
+              <code>streaming_anthropic_chat.rs</code>，679 行），
+              就把全部组合凑齐了。
+            </p>
+            <p>
+              <b>流式（SSE）也支持。</b>SSE = 服务器推送流，就是让 AI
+              的回答一个字一个字往外蹦，
+              而不是憋半天丢一整段。转换器覆盖了文字、工具调用、用量统计、报错，
+              以及"上游其实没走流式"时的兜底。
+            </p>
+            <p>
+              <b>配置存哪：</b>数据库 <code>settings</code> 表的
+              <code>gateway_config</code> 键，JSON 格式。三个界面命令：
+              <code>get_gateway_config</code> /
+              <code>save_gateway_config</code> /
+              <code>regenerate_gateway_key</code>（见
+              <code>src-tauri/src/commands/gateway.rs</code>，197 行）。
+              开着网关时关掉应用再打开，会自动把代理服务重新拉起来。
+            </p>
+            <p>
+              <b>不影响原版行为：</b>路由挂在 <code>/gateway/</code> 前缀下，
+              和原版的 <code>/v1/*</code> 完全不打架，两套可以同时跑。
+            </p>
+          </div>
+        </details>
+      </div>
+
+      <!-- ============ 功能 2 ============ -->
+      <div class="card accent">
+        <h3><span class="label tag-accent">功能 2</span>Live 配置保护</h3>
+        <p>
+          <b>一句话：</b>你手动改过的配置文件（比如
+          <code>~/.codex/config.toml</code>），CC Switch
+          不会再一声不吭地覆盖掉。
+        </p>
+        <p class="small muted">
+          先解释「live 配置」：CC Switch 管理供应商的方式，是直接去改那些 CLI
+          工具真正在读的配置文件—— Claude 的 <code>settings.json</code>、Codex
+          的 <code>config.toml</code> 等等。 这些正在生效的文件就叫 live 配置。
+        </p>
+
+        <div class="vs">
+          <div class="before">
+            <span class="t">原版怎样</span>
+            你在 <code>config.toml</code> 里手加了几行自己的设置。 下次重启 CC
+            Switch 或者切一次供应商，写盘时<b>整个文件被全量替换</b>，
+            你加的东西<b>无声消失</b>。你甚至不会知道发生过。
+          </div>
+          <div class="after">
+            <span class="t">魔改版怎样</span>
+            写盘前先算一遍文件的"指纹"，跟"CC Switch 上次写完时的指纹"对一下。
+            对不上 = 中间有人手动改过 →
+            <b>拒绝写盘</b>，界面弹提示告诉你冲突了，
+            并提示你可以关掉保护强制覆盖。默认开启。
+          </div>
+        </div>
+
+        <div class="analogy">
+          <b>类比：</b
+          >像共享文档的"有人在你之后改过这份文件，确定要用你的版本覆盖吗？"提示——
+          原版是直接覆盖不问，魔改版会先停下来问你。
+        </div>
+
+        <details>
+          <summary>展开技术细节</summary>
+          <div class="small">
+            <p>
+              核心代码在 <code>src-tauri/src/live_protection.rs</code>（196
+              行）。
+            </p>
+            <p>
+              <b>两个指纹：</b>数据库的
+              <code>proxy_live_backup</code> 表新增了两列， 指纹用 SHA256
+              算法算（一种把任意文件压成 64 位固定字符串的方法，
+              内容改一个字符结果就完全不同）：
+            </p>
+            <ul>
+              <li>
+                <code>original_hash</code> — CC Switch <b>第一次接管前</b>，
+                文件原本长什么样
+              </li>
+              <li>
+                <code>managed_hash</code> — CC Switch
+                <b>最近一次自己写完后</b>， 文件长什么样
+              </li>
+            </ul>
+            <p>
+              <b>为什么需要两个：</b>只有 <code>original_hash</code> 的话， CC
+              Switch 自己每次写盘都会让指纹变化，结果它会把自己的正常写入
+              误判成"用户改过"，天天误报。加上 <code>managed_hash</code> 后，
+              才能干净地分清"这是应用写的"和"这是人改的"。 （这正是提交
+              <code>d0b99a75</code> 修的问题。）
+            </p>
+            <p>
+              <b>判定流程</b
+              >（<code>check_user_modified</code>）——以下任一情况直接放行，
+              不打扰你：应用类型不在保护范围、保护开关被你关了、
+              从没接管过这个应用（没有"原版"可比）、老数据没存指纹。
+              只有在<b>确实存过指纹且当前磁盘指纹对不上</b>时， 才返回
+              <code>LiveConfigModifiedByUser</code> 错误并中止写盘。
+            </p>
+            <p>
+              <b>覆盖范围：</b>Claude（<code>settings.json</code>）、
+              Codex（<code>config.toml</code>）、Gemini（<code>.env</code>，
+              没有就退回 <code>settings.json</code>）、Grok
+              Build（<code>config</code>）。
+              接管、切换供应商、代理运行期间的同步写盘，三个入口都接了这套校验。
+            </p>
+            <p>
+              <b>开关：</b><code>protect_user_live_edits</code>，默认
+              <span class="good">开启</span>。设置里的代理面板可以关掉，
+              关掉后恢复原版的强制覆盖行为。
+            </p>
+            <p>
+              <b>前端提示：</b>界面通过匹配错误信息前缀（「用户已修改」/「User
+              has modified」等） 识别这类冲突，弹出专门的 toast
+              提示而不是一串看不懂的报错。
+            </p>
+          </div>
+        </details>
+      </div>
+
+      <!-- ============ 功能 3 ============ -->
+      <div class="card accent">
+        <h3>
+          <span class="label tag-accent">功能 3</span>Codex
+          <code>auth.json</code> 反向同步
+        </h3>
+        <p>
+          <b>一句话：</b>修掉「Codex
+          供应商改完密钥保存了，界面上却还显示老密钥」这个诡异 Bug。
+        </p>
+
+        <div class="vs">
+          <div class="before">
+            <span class="t">原版怎样（官方 Bug #3646）</span>
+            Codex CLI 从 0.14 版本起，每次启动会<b>自己</b>往
+            <code>~/.codex/auth.json</code> 里写回一个陈年旧的
+            <code>OPENAI_API_KEY</code>。CC Switch 打开编辑框时会去读这个文件，
+            于是读到的是旧值。你明明保存成功了，界面却还显示老 key，
+            以为"保存没生效"，反复折腾。
+          </div>
+          <div class="after">
+            <span class="t">魔改版怎样</span>
+            每次保存或切换 Codex 供应商时，主动把 <code>auth.json</code> 里的
+            <code>OPENAI_API_KEY</code> 这<b>一个字段</b>同步成数据库里的真值。
+            Codex CLI 之后再写回旧值也不怕——下次保存会再纠正一次。
+          </div>
+        </div>
+
+        <details>
+          <summary>展开技术细节</summary>
+          <div class="small">
+            <p>
+              核心代码在
+              <code>src-tauri/src/services/codex_auth_sync.rs</code>（328 行）。
+            </p>
+            <p>
+              <b>最关键的克制：只改一个字段。</b><code>auth.json</code> 里还住着
+              <code>auth_mode</code> 和 <code>tokens</code> （ChatGPT
+              的登录凭证：id_token / access_token / refresh_token /
+              account_id）。 这些一旦被动，你的 ChatGPT
+              官方登录会直接坏掉。所以这里是 「读出 JSON → 只替换
+              <code>OPENAI_API_KEY</code> → 原样写回」， 其他任何字段（哪怕是
+              Codex 自己写的、这份代码不认识的）全部原样保留。
+            </p>
+            <p>
+              <b>三重保险：</b>
+            </p>
+            <ul>
+              <li>只对 Codex 应用生效，其他应用直接跳过</li>
+              <li>
+                如果你打开了「保留 Codex 官方登录」开关
+                （<code>preserve_codex_official_auth_on_switch</code>），
+                整个同步会跳过，绝不碰你手填的官方 key
+              </li>
+              <li>值已经一致就什么都不做（不做无意义的磁盘写入）</li>
+            </ul>
+            <p>
+              <b>失败不阻塞：</b>读、解析、写这三步中任何一步失败，
+              都只记一条警告日志，<b>绝不让保存流程失败</b>。
+              这是个"锦上添花"的修复，不该因为它而让你连供应商都存不上。
+            </p>
+            <p>
+              <b>原子写：</b>先写临时文件再改名替换，
+              保证中途断电也不会留下一个半截的损坏 <code>auth.json</code>。
+            </p>
+          </div>
+        </details>
+      </div>
+
+      <!-- ============ 功能 4 ============ -->
+      <div class="card accent">
+        <h3>
+          <span class="label tag-accent">功能 4</span>3 个隐藏功能补上界面
+        </h3>
+        <p>
+          <b>一句话：</b>原版里有三个功能<b>后端早就写好了</b>，
+          只是<b>忘了（或没来得及）做界面</b>，普通用户根本没法用。魔改版把界面补上了。
+        </p>
+
+        <div class="vs">
+          <div class="before">
+            <span class="t">原版怎样</span>
+            <code>enter_lightweight_mode</code>、
+            <code>get_copilot_optimizer_config</code>、
+            <code>get_claude_plugin_status</code>
+            这些命令在程序里躺着，但设置页面没有任何按钮能触发它们。
+            相当于房间里装了灯，就是没装开关。
+          </div>
+          <div class="after">
+            <span class="t">魔改版怎样</span>
+            加了 3 个设置面板 + 4 个前端接口封装文件，把开关装上。
+            <b>后端零改动</b>——一行原版代码都没碰，纯粹是把已有能力露出来。
+          </div>
+        </div>
+
+        <table>
+          <tr>
+            <th style="width: 26%">功能</th>
+            <th>它是干嘛的</th>
+          </tr>
+          <tr>
+            <td><b>Copilot 优化器</b></td>
+            <td>
+              8 个开关 + 1 个预热模型输入框。用来调优走 GitHub Copilot
+              通道时的行为： 请求分类、工具结果合并、压缩检测、请求 ID
+              固定、子代理识别、
+              预热降级、去除思考内容等。改完立即保存，保存失败自动回滚成上次成功的值。
+            </td>
+          </tr>
+          <tr>
+            <td><b>轻量模式</b></td>
+            <td>
+              一键把应用切进精简形态（会先弹确认框）。适合长期挂后台、
+              只用托盘切供应商的场景。
+            </td>
+          </tr>
+          <tr>
+            <td><b>Claude 插件状态</b></td>
+            <td>
+              查看 Claude
+              插件当前状态、是否已应用，并能弹窗查看格式化后的原始配置内容、
+              一键复制。诊断"为什么插件没生效"时很有用。
+            </td>
+          </tr>
+        </table>
+
+        <details>
+          <summary>展开技术细节 · 附带的第 5 项改动</summary>
+          <div class="small">
+            <p>
+              新增组件：<code>src/components/settings/</code> 下的
+              <code>CopilotOptimizerPanel.tsx</code>（126 行）、
+              <code>LightweightModeSettings.tsx</code>（58 行）、
+              <code>ClaudePluginStatusPanel.tsx</code>（155 行）；
+              新增接口封装：<code>src/lib/api/</code> 下的
+              <code>copilotOptimizer.ts</code> / <code>lightweight.ts</code> /
+              <code>claudePlugin.ts</code> / <code>gateway.ts</code>。
+              四语言文案（中 / 繁 / 英 / 日）各加了 99 行。
+            </p>
+            <p><b>顺带做的两处小改动：</b></p>
+            <ul>
+              <li>
+                <b>代理面板常驻可见</b>（提交 <code>2f8d9a9f</code>）：原版的
+                「应用接管」开关藏在一个动画折叠区里，代理没运行时根本看不到。
+                改成常驻显示，文案也从生硬的「应用接管」改成 「使用 CC Switch
+                代理」。
+              </li>
+              <li>
+                <b>隐藏云同步入口</b>（提交 <code>04bf436d</code>）： WebDAV /
+                S3 云同步的设置入口被藏起来了，靠的是
+                <code>src/config/featureFlags.ts</code> 里一行
+                <code>ENABLE_CLOUD_SYNC = false</code>。
+                <b>后端代码完全保留</b>，把这行改成 <code>true</code> 就恢复。
+              </li>
+            </ul>
+          </div>
+        </details>
+      </div>
+
+      <h2>3. 和官方原版的关系</h2>
+
+      <p>魔改版的立场是<b>加法为主</b>。下面这张表把三类改动分清楚：</p>
+
+      <table>
+        <tr>
+          <th style="width: 16%">类别</th>
+          <th style="width: 42%">具体内容</th>
+          <th>说明</th>
+        </tr>
+        <tr>
+          <td><span class="label tag-good">完全复用</span></td>
+          <td>
+            供应商管理 / 切换 / 导入导出<br />
+            系统托盘快捷切换<br />
+            50+ 内置供应商预设<br />
+            统一 MCP / Prompts / Skills 管理<br />
+            本地代理：格式转换、故障切换、熔断、健康监控<br />
+            使用统计与请求日志、按模型自定义价格<br />
+            会话管理、OpenClaw 工作区编辑<br />
+            主题、深链、自动备份、原子写、多语言
+          </td>
+          <td>
+            行为与官方 <b>完全一致</b>，一行没动。
+            官方文档怎么写，这里就怎么用。
+          </td>
+        </tr>
+        <tr>
+          <td><span class="label tag-accent">fork 新增</span></td>
+          <td>
+            统一网关 <code>/gateway/*</code>（4 个路由）<br />
+            Live 配置保护（双指纹 + 冲突提示）<br />
+            Codex <code>auth.json</code> 反向同步<br />
+            3 个隐藏功能的界面<br />
+            代理面板常驻可见 + 文案改写<br />
+            一键同步上游脚本 <code>scripts/sync-upstream.sh</code><br />
+            Windows 绿色版打包流程 <code>release-portable.yml</code>
+          </td>
+          <td>
+            本页第 2 章讲的就是前 4 块。 后两项是维护用的工具，不影响使用体验。
+          </td>
+        </tr>
+        <tr>
+          <td><span class="label tag-bad">fork 删掉</span></td>
+          <td>
+            首页 README 的<b>赞助商推广区</b>（28 段广告文案，459 行）<br />
+            三个翻译版 README 里的对应推广块
+          </td>
+          <td>
+            <b>只删文档，不删功能。</b
+            >那些赞助商对应的<b>供应商预设仍然全部保留</b>，
+            在添加供应商时照样能选到。删的只是首页那一大片广告。
+          </td>
+        </tr>
+        <tr>
+          <td><span class="label tag-warn">仅隐藏</span></td>
+          <td>WebDAV / S3 云同步的设置入口</td>
+          <td>
+            <b>后端代码一行没删</b>，只是关掉了开关。
+            这是魔改原则②的体现：宁可留着不用，也不砍断跟官方的兼容性。
+          </td>
+        </tr>
+      </table>
+
+      <div class="note">
+        <b>为什么这么克制？</b>因为要长期跟着官方走。每删一处官方代码，
+        下次官方更新时就多一处合并冲突。26 个改动提交里，
+        真正碰到官方"枢纽文件"的只有寥寥几个
+        （<code>lib.rs</code>、<code>commands/mod.rs</code>、
+        <code>SettingsPage.tsx</code>、<code>proxy/server.rs</code>），
+        其余全是新建文件。上一次合并官方 v3.18.0 时，
+        <b>总共只出现了 4 处冲突</b>，全部当天解决。
+      </div>
+
+      <h2>4. 同步历史时间线</h2>
+
+      <div class="timeline">
+        <div class="tl-item up">
+          <div class="tl-date">起点 · 官方 v3.18.0</div>
+          <div class="tl-title">上游基线</div>
+          <div class="tl-body">
+            魔改版的地基。数据库结构版本 v18。 官方带来的能力：Windows
+            切换闪窗卡死修复、日志持久化 + 密钥脱敏、 白屏留痕、Codex
+            工具参数兼容、xAI / Grok OAuth 全家桶。
+          </div>
+        </div>
+
+        <div class="tl-item">
+          <div class="tl-date">2026-07-19</div>
+          <div class="tl-title">第一波：统一网关 + 界面补全（8 个提交）</div>
+          <div class="tl-body">
+            隐藏云同步入口 → 补上 3 个隐藏功能的界面 → 网关后端 4 个端点上线 →
+            代理面板常驻可见 → Live 配置保护首版 → 补齐流式（SSE）转换， 9
+            种协议组合全部打通。
+          </div>
+        </div>
+
+        <div class="tl-item">
+          <div class="tl-date">2026-07-25</div>
+          <div class="tl-title">第二波：修 Bug + 打磨（4 个提交）</div>
+          <div class="tl-body">
+            根治 Codex 密钥显示旧值（官方 Bug #3646）→ 加
+            <code>managed_hash</code> 区分"应用写盘"和"用户手改"， 消除 Live
+            保护误报 → 新增一键同步上游脚本 → 重写 README，剔除赞助区。
+          </div>
+        </div>
+
+        <div class="tl-item up">
+          <div class="tl-date">2026-07-26 · 上游同步</div>
+          <div class="tl-title">合入官方 v3.18.0 → <code>b0482320</code></div>
+          <div class="tl-body">
+            官方在 7-24 ~ 7-26 推了 4 个新提交：赞助商域名
+            <code>.com → .ai</code> 刷新、 内置定价表加
+            <code>claude-opus-5</code>、恢复 AICoding 合作伙伴预设、
+            发布产物镜像到 Cloudflare R2。<br />
+            <b>冲突处理：</b>共 3 个文件、6 处冲突，全部集中在 README，
+            <b>一律保留魔改版</b>（保持无广告立场）。代码零冲突。 数据库结构仍是
+            v18。<br />
+            <b>AICoding 的处理很典型：</b>它的<b>供应商预设保留</b>
+            （你在添加供应商时能选到），只是<b>从 README 删掉推广段落</b>。
+          </div>
+        </div>
+
+        <div class="tl-item">
+          <div class="tl-date">2026-07-26 · 收尾</div>
+          <div class="tl-title">分支整理 + 质量把关（7 个提交）</div>
+          <div class="tl-body">
+            分支重命名（魔改主线改叫 <code>main</code>，官方镜像叫
+            <code>upstream</code>）→ Windows 绿色版打包流程上线 →
+            跑代码格式化和静态检查、修 8 个警告 → 让 Codex
+            同步读取「保留官方登录」开关。
+          </div>
+        </div>
+
+        <div class="tl-item now">
+          <div class="tl-date">当前</div>
+          <div class="tl-title">领先官方 26 个提交</div>
+          <div class="tl-body">
+            版本号刻意<b>跟官方保持一致</b>（都是 <code>3.18.0</code>），
+            魔改版的迭代次数体现在发布标签的后缀上（如
+            <code>m3.18.0-1</code>、<code>m3.18.0-2</code>）。
+            这样合并官方更新时永远不用回填版本号。<br />
+            <b>验证状态：</b>后端测试 2202 项通过、0 失败；
+            后端编译检查干净；前端类型检查干净。
+          </div>
+        </div>
+      </div>
+
+      <h2>5. 怎么用统一网关（唯一需要动手配置的功能）</h2>
+
+      <p>
+        另外 3 项魔改（Live 保护、Codex
+        同步、隐藏功能界面）都是<b>装好即生效</b>，
+        不用配。只有统一网关需要你花两分钟接一下。
+      </p>
+
+      <div class="card">
+        <h3>第一步：在应用里开启</h3>
+        <ol>
+          <li><b>设置</b> → <b>高级</b> → 找到「<b>统一网关</b>」面板</li>
+          <li>
+            打开开关。系统会自动生成一把 <code>ccs-</code> 开头的钥匙，
+            并把本地代理服务拉起来
+          </li>
+          <li>
+            在下方的模型列表里，<b>勾选你想暴露出去的「供应商 + 模型」组合</b>。
+            每勾一个就会生成一个别名（形如 <code>供应商名/模型名</code>）
+          </li>
+          <li>面板上有一键复制按钮，可以直接把地址和钥匙拷走</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3>第二步：在客户端里填三个值</h3>
+        <table>
+          <tr>
+            <th style="width: 20%">填什么</th>
+            <th>填成什么</th>
+          </tr>
+          <tr>
+            <td><b>base_url</b><br />（接口地址）</td>
+            <td>
+              <code>http://127.0.0.1:15721/gateway/v1</code><br />
+              <span class="muted small"
+                >15721 是默认端口。如果你在代理设置里改过端口，
+                请以面板上显示的实际地址为准。</span
+              >
+            </td>
+          </tr>
+          <tr>
+            <td><b>api_key</b><br />（钥匙）</td>
+            <td>
+              面板上显示的 <code>ccs-</code> 开头那串。
+              <span class="muted small">怀疑泄露时可以在面板上一键重置。</span>
+            </td>
+          </tr>
+          <tr>
+            <td><b>model</b><br />（模型名）</td>
+            <td>
+              填你勾选出来的<b>别名</b>，不是原始模型名。<br />
+              <span class="muted small"
+                >填错了不用慌——网关会返回一条错误，
+                里面直接列出当前所有可用的别名。</span
+              >
+            </td>
+          </tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3>四个路由：什么客户端配哪个</h3>
+        <table>
+          <tr>
+            <th style="width: 42%">路由</th>
+            <th>什么时候用它</th>
+          </tr>
+          <tr>
+            <td><code>/gateway/v1/chat/completions</code></td>
+            <td>
+              <b>最常用。</b>绝大多数第三方工具、IDE 插件、自写脚本都认这个
+              （OpenAI 兼容格式）。不确定选哪个就选它。
+            </td>
+          </tr>
+          <tr>
+            <td><code>/gateway/v1/messages</code></td>
+            <td>客户端说 Anthropic Messages 格式时用（Claude 生态的工具）</td>
+          </tr>
+          <tr>
+            <td><code>/gateway/v1/responses</code></td>
+            <td>客户端说 OpenAI Responses 格式时用（Codex 系）</td>
+          </tr>
+          <tr>
+            <td><code>/gateway/v1/models</code></td>
+            <td>
+              只读。客户端拿它来填模型下拉框；你也能用它确认别名有没有配对
+            </td>
+          </tr>
+        </table>
+        <p class="small muted">
+          三种入站格式 × 四种上游格式 = 12 种组合全部支持，
+          流式（一个字一个字往外蹦）和非流式都可以。
+          客户端说什么方言、供应商说什么方言，网关中间自动翻译。
+        </p>
+      </div>
+
+      <div class="card">
+        <h3>可复制的配置示例</h3>
+        <p class="small muted">环境变量写法（很多命令行工具认这两个变量）：</p>
+        <pre><code>export OPENAI_BASE_URL="http://127.0.0.1:15721/gateway/v1"
+export OPENAI_API_KEY="ccs-你面板上的那串48位字符"</code></pre>
+
+        <p class="small muted">JSON 配置写法（图形界面客户端常见）：</p>
+        <pre><code>{
+  "base_url": "http://127.0.0.1:15721/gateway/v1",
+  "api_key": "ccs-你面板上的那串48位字符",
+  "model": "供应商名/模型名"
+}</code></pre>
+
+        <p class="small muted">
+          命令行验证一下通不通（把两处占位替换成你的实际值）：
+        </p>
+        <pre><code>curl http://127.0.0.1:15721/gateway/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ccs-你的钥匙" \
+  -d '{"model":"供应商名/模型名",
+       "messages":[{"role":"user","content":"你好"}]}'</code></pre>
+      </div>
+
+      <details>
+        <summary>接不通？对着返回码排查</summary>
+        <div class="small">
+          <table>
+            <tr>
+              <th style="width: 14%">返回码</th>
+              <th style="width: 32%">意思</th>
+              <th>怎么办</th>
+            </tr>
+            <tr>
+              <td><span class="label tag-bad">401</span></td>
+              <td>没带钥匙，或者钥匙错了</td>
+              <td>
+                检查 <code>api_key</code> 是否完整（<code>ccs-</code>
+                前缀不能少）。 重置过钥匙的话记得同步更新客户端。
+              </td>
+            </tr>
+            <tr>
+              <td><span class="label tag-bad">403</span></td>
+              <td>钥匙对，但网关开关是关的</td>
+              <td>回设置 → 高级 → 统一网关，把开关打开。</td>
+            </tr>
+            <tr>
+              <td><span class="label tag-warn">400</span></td>
+              <td>模型别名没匹配上</td>
+              <td>
+                返回信息里<b>直接列出了所有可用别名</b>，照抄一个即可。
+                注意别名是精确匹配，大小写和斜杠都不能差。
+              </td>
+            </tr>
+            <tr>
+              <td><span class="label tag-warn">连不上</span></td>
+              <td>代理服务没在跑，或端口不对</td>
+              <td>
+                确认 CC Switch 正在运行、代理服务已启动；
+                端口以面板上显示的为准（默认 15721）。
+              </td>
+            </tr>
+          </table>
+          <p>
+            <b>安全提示：</b>网关只监听 <code>127.0.0.1</code>（本机回环地址），
+            默认<b>只有你这台电脑上的程序能连</b>，局域网里的其他设备连不进来。
+            这把 <code>ccs-</code> 钥匙不要贴到公开的地方。
+          </p>
+        </div>
+      </details>
+
+      <footer>
+        <p>
+          魔改版仓库：<a href="https://github.com/qianbkk/cc-switch"
+            >github.com/qianbkk/cc-switch</a
+          ><br />
+          官方原版：<a href="https://github.com/farion1231/cc-switch"
+            >github.com/farion1231/cc-switch</a
+          >
+        </p>
+        <p>
+          本页随应用版本一起打包，<b>升级应用即更新本页</b>。<br />
+          页面完全离线自包含，不联网、不加载任何外部资源。
+        </p>
+        <p class="muted">
+          数据来源：本仓库 <code>git</code> 提交记录 ·
+          <code>docs/CUSTOM_FORK_PLAN.md</code> · 上游基线
+          <code>b0482320</code>（2026-07-26）
+        </p>
+      </footer>
+    </div>
+  </body>
+</html>

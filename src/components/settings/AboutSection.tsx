@@ -14,6 +14,7 @@ import {
   ArrowUpCircle,
   ChevronDown,
   Stethoscope,
+  GitCompare,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -451,6 +452,15 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
     }
   }, [t, updateInfo?.availableVersion, version]);
 
+  const handleOpenForkChanges = useCallback(async () => {
+    try {
+      await settingsApi.openForkChangesHtml();
+    } catch (error) {
+      console.error("[AboutSection] Failed to open fork changes", error);
+      toast.error(t("settings.openForkChangesFailed"));
+    }
+  }, [t]);
+
   const handleCheckUpdate = useCallback(async () => {
     if (hasUpdate) {
       if (isPortable) {
@@ -886,6 +896,16 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
             >
               <Github className="h-3.5 w-3.5" />
               {t("settings.github")}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleOpenForkChanges}
+              className="h-8 gap-1.5 text-xs"
+            >
+              <GitCompare className="h-3.5 w-3.5" />
+              {t("settings.forkChanges")}
             </Button>
             <Button
               type="button"

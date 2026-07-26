@@ -225,6 +225,17 @@ export const settingsApi = {
     await invoke("open_external", { url });
   },
 
+  /**
+   * 打开「魔改版 vs 原版」说明页。
+   *
+   * HTML 编译期嵌入二进制，随应用版本一起更新。释放临时文件 + 调起系统默认
+   * 浏览器都在后端完成（`openExternal` 只收 http(s)，无法用于本地文件路径），
+   * 返回释放出的文件路径。
+   */
+  async openForkChangesHtml(): Promise<string> {
+    return await invoke("open_fork_changes_html");
+  },
+
   async setAutoLaunch(enabled: boolean): Promise<boolean> {
     return await invoke("set_auto_launch", { enabled });
   },

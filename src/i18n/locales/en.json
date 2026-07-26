@@ -869,6 +869,8 @@
     "checkUpdateFailed": "Failed to check for updates, please try again later.",
     "openReleaseNotesFailed": "Failed to open release notes",
     "releaseNotes": "Release Notes",
+    "forkChanges": "Fork Changes",
+    "openForkChangesFailed": "Failed to open fork changes",
     "viewReleaseNotes": "View release notes for this version",
     "viewCurrentReleaseNotes": "View current version release notes",
     "officialWebsite": "Official Website",

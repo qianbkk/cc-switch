@@ -869,6 +869,8 @@
     "checkUpdateFailed": "檢查更新失敗，請稍後重試。",
     "openReleaseNotesFailed": "開啟更新日誌失敗",
     "releaseNotes": "更新日誌",
+    "forkChanges": "魔改詳情",
+    "openForkChangesFailed": "開啟魔改說明失敗",
     "viewReleaseNotes": "檢視該版本更新日誌",
     "viewCurrentReleaseNotes": "檢視目前版本更新日誌",
     "officialWebsite": "官方網站",
