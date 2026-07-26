@@ -54,6 +54,10 @@ pub fn maybe_sync_codex_auth(
     if !matches!(app_type, AppType::Codex) {
         return;
     }
+    // 用户在 auth.json 手填的官方 key 一经切换不覆盖
+    if crate::settings::preserve_codex_official_auth_on_switch() {
+        return;
+    }
     let Some(key) = provider
         .settings_config
         .get("auth")
