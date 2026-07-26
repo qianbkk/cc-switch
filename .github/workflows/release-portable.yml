@@ -49,18 +49,21 @@ jobs:
         shell: pwsh
         run: pnpm install --frozen-lockfile
 
-      - name: Build portable (zip only, no signing)
+      - name: Build frontend (vite, before Tauri bundles it)
+        shell: pwsh
+        run: pnpm build
+
+      - name: Build Tauri app (exe only, no installers)
         shell: pwsh
         env:
-          # 跳过 Windows 代码签名检查 — 我们只产绿色 zip,免安装,不需要 EV 证书
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
           TAURI_SIGNING_PRIVATE_KEY: ''
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ''
         run: |
-          # Tauri 2.x --bundles 仅接受 msi/nsis(zip 是我们在下游打的)。
-          # 用 CSC_IDENTITY_AUTO_DISCOVERY=false 让 msi 构建被跳过(无 Windows 代码证书),
-          # 后续步骤从 target/release/cc-switch.exe 自行打 portable.zip。
-          pnpm tauri build --target x86_64-pc-windows-msvc --bundles none
+          # 用 `cargo build --release` 跳过 Tauri CLI 的 bundle 阶段(只产 exe),
+          # 避免 msi 构建需要 Windows 代码签名证书。后续步骤从 exe 自行打 portable.zip。
+          cd src-tauri
+          cargo build --release --target x86_64-pc-windows-msvc
 
       - name: Package portable zip
         shell: pwsh
