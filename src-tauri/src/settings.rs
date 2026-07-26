@@ -403,6 +403,13 @@ pub struct AppSettings {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub language: Option<String>,
 
+    // ===== 魔改版专属 =====
+    /// 魔改功能总开关（fork 专属）。关闭后所有 fork 独有行为一律停用，
+    /// 应用回到与上游原版一致的行为；配置数据全部保留，重新打开即恢复。
+    /// 默认 true——这本来就是魔改版构建。
+    #[serde(default = "default_fork_features_enabled")]
+    pub fork_features_enabled: bool,
+
     // ===== 主页面显示的应用 =====
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub visible_apps: Option<VisibleApps>,
@@ -502,6 +509,10 @@ fn default_show_profile_switcher() -> bool {
     true
 }
 
+fn default_fork_features_enabled() -> bool {
+    true
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
@@ -524,6 +535,7 @@ impl Default for AppSettings {
             failover_confirmed: None,
             first_run_notice_confirmed: None,
             common_config_confirmed: None,
+            fork_features_enabled: true,
             language: None,
             visible_apps: None,
             claude_config_dir: None,
@@ -951,6 +963,18 @@ pub fn unify_codex_session_history() -> bool {
             e.into_inner()
         })
         .unify_codex_session_history
+}
+
+/// 魔改功能总开关（fork 专属）。返回 false 时，所有 fork 独有行为都应当
+/// 让路给上游原版行为——用作各魔改入口的统一守卫。
+pub fn fork_features_enabled() -> bool {
+    settings_store()
+        .read()
+        .unwrap_or_else(|e| {
+            log::warn!("设置锁已毒化，使用恢复值: {e}");
+            e.into_inner()
+        })
+        .fork_features_enabled
 }
 
 // ===== 当前供应商管理函数 =====

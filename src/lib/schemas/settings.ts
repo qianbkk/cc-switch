@@ -18,6 +18,8 @@ export const settingsSchema = z.object({
   usageDashboardRefreshIntervalMs: z.number().optional(),
   preserveCodexOfficialAuthOnSwitch: z.boolean().optional(),
   unifyCodexSessionHistory: z.boolean().optional(),
+  /** 魔改功能总开关（fork 专属）：关闭后所有魔改行为让路给上游原版 */
+  forkFeaturesEnabled: z.boolean().optional(),
   language: z.enum(["en", "zh", "zh-TW", "ja"]).optional(),
 
   // 设备级目录覆盖

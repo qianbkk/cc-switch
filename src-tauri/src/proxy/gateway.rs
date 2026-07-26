@@ -146,6 +146,14 @@ fn authorize(
         ))
     })?;
 
+    // 魔改总开关关闭时，统一网关整体停用（配置保留，重新打开即恢复）。
+    if !crate::settings::fork_features_enabled() {
+        return Err(Box::new(auth_error_response(
+            StatusCode::FORBIDDEN,
+            "魔改功能已在设置中整体关闭，统一网关不可用",
+        )));
+    }
+
     if !cfg.enabled {
         return Err(Box::new(auth_error_response(
             StatusCode::FORBIDDEN,

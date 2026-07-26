@@ -58,6 +58,7 @@ import { GatewaySettingsPanel } from "@/components/settings/GatewaySettingsPanel
 import { CopilotOptimizerPanel } from "@/components/settings/CopilotOptimizerPanel";
 import { ClaudePluginStatusPanel } from "@/components/settings/ClaudePluginStatusPanel";
 import { LightweightModeSettings } from "@/components/settings/LightweightModeSettings";
+import { ForkFeaturesSettings } from "@/components/settings/ForkFeaturesSettings";
 import { AuthCenterPanel } from "@/components/settings/AuthCenterPanel";
 import { CodexAuthSettings } from "@/components/settings/CodexAuthSettings";
 import { useInstalledSkills } from "@/hooks/useSkills";
@@ -220,6 +221,12 @@ export function SettingsPage({
 
   const isBusy = useMemo(() => isLoading && !settings, [isLoading, settings]);
 
+  /**
+   * 魔改功能总开关。关闭时隐藏所有 fork 新增面板，并让被 fork 隐藏的上游
+   * 入口（如云同步）重新出现——即整体回到上游原版的界面形态。
+   */
+  const forkEnabled = settings?.forkFeaturesEnabled ?? true;
+
   return (
     <div className="flex flex-col h-full overflow-hidden px-6">
       {isBusy ? (
@@ -296,7 +303,11 @@ export function SettingsPage({
                         handleAutoSave({ preferredTerminal: terminal })
                       }
                     />
-                    <LightweightModeSettings />
+                    {forkEnabled && <LightweightModeSettings />}
+                    <ForkFeaturesSettings
+                      settings={settings}
+                      onChange={handleAutoSave}
+                    />
                   </motion.div>
                 ) : null}
               </TabsContent>
@@ -334,75 +345,83 @@ export function SettingsPage({
                       defaultValue={[]}
                       className="w-full space-y-4"
                     >
-                      <AccordionItem
-                        value="gateway"
-                        className="rounded-xl glass-card overflow-hidden"
-                      >
-                        <AccordionTrigger className="px-6 py-4 hover:no-underline hover:bg-muted/50 data-[state=open]:bg-muted/50">
-                          <div className="flex items-center gap-3">
-                            <Network className="h-5 w-5 text-violet-500" />
-                            <div className="text-left">
-                              <h3 className="text-base font-semibold">
-                                {t("settings.advanced.gateway.title")}
-                              </h3>
-                              <p className="text-sm text-muted-foreground font-normal">
-                                {t("settings.advanced.gateway.description")}
-                              </p>
+                      {forkEnabled && (
+                        <AccordionItem
+                          value="gateway"
+                          className="rounded-xl glass-card overflow-hidden"
+                        >
+                          <AccordionTrigger className="px-6 py-4 hover:no-underline hover:bg-muted/50 data-[state=open]:bg-muted/50">
+                            <div className="flex items-center gap-3">
+                              <Network className="h-5 w-5 text-violet-500" />
+                              <div className="text-left">
+                                <h3 className="text-base font-semibold">
+                                  {t("settings.advanced.gateway.title")}
+                                </h3>
+                                <p className="text-sm text-muted-foreground font-normal">
+                                  {t("settings.advanced.gateway.description")}
+                                </p>
+                              </div>
                             </div>
-                          </div>
-                        </AccordionTrigger>
-                        <AccordionContent className="px-6 pb-6 pt-4 border-t border-border/50">
-                          <GatewaySettingsPanel />
-                        </AccordionContent>
-                      </AccordionItem>
+                          </AccordionTrigger>
+                          <AccordionContent className="px-6 pb-6 pt-4 border-t border-border/50">
+                            <GatewaySettingsPanel />
+                          </AccordionContent>
+                        </AccordionItem>
+                      )}
 
-                      <AccordionItem
-                        value="copilotOptimizer"
-                        className="rounded-xl glass-card overflow-hidden"
-                      >
-                        <AccordionTrigger className="px-6 py-4 hover:no-underline hover:bg-muted/50 data-[state=open]:bg-muted/50">
-                          <div className="flex items-center gap-3">
-                            <Gauge className="h-5 w-5 text-pink-500" />
-                            <div className="text-left">
-                              <h3 className="text-base font-semibold">
-                                {t("settings.advanced.copilotOptimizer.title")}
-                              </h3>
-                              <p className="text-sm text-muted-foreground font-normal">
-                                {t(
-                                  "settings.advanced.copilotOptimizer.description",
-                                )}
-                              </p>
+                      {forkEnabled && (
+                        <AccordionItem
+                          value="copilotOptimizer"
+                          className="rounded-xl glass-card overflow-hidden"
+                        >
+                          <AccordionTrigger className="px-6 py-4 hover:no-underline hover:bg-muted/50 data-[state=open]:bg-muted/50">
+                            <div className="flex items-center gap-3">
+                              <Gauge className="h-5 w-5 text-pink-500" />
+                              <div className="text-left">
+                                <h3 className="text-base font-semibold">
+                                  {t(
+                                    "settings.advanced.copilotOptimizer.title",
+                                  )}
+                                </h3>
+                                <p className="text-sm text-muted-foreground font-normal">
+                                  {t(
+                                    "settings.advanced.copilotOptimizer.description",
+                                  )}
+                                </p>
+                              </div>
                             </div>
-                          </div>
-                        </AccordionTrigger>
-                        <AccordionContent className="px-6 pb-6 pt-4 border-t border-border/50">
-                          <CopilotOptimizerPanel />
-                        </AccordionContent>
-                      </AccordionItem>
+                          </AccordionTrigger>
+                          <AccordionContent className="px-6 pb-6 pt-4 border-t border-border/50">
+                            <CopilotOptimizerPanel />
+                          </AccordionContent>
+                        </AccordionItem>
+                      )}
 
-                      <AccordionItem
-                        value="claudePlugin"
-                        className="rounded-xl glass-card overflow-hidden"
-                      >
-                        <AccordionTrigger className="px-6 py-4 hover:no-underline hover:bg-muted/50 data-[state=open]:bg-muted/50">
-                          <div className="flex items-center gap-3">
-                            <Puzzle className="h-5 w-5 text-teal-500" />
-                            <div className="text-left">
-                              <h3 className="text-base font-semibold">
-                                {t("settings.advanced.claudePlugin.title")}
-                              </h3>
-                              <p className="text-sm text-muted-foreground font-normal">
-                                {t(
-                                  "settings.advanced.claudePlugin.description",
-                                )}
-                              </p>
+                      {forkEnabled && (
+                        <AccordionItem
+                          value="claudePlugin"
+                          className="rounded-xl glass-card overflow-hidden"
+                        >
+                          <AccordionTrigger className="px-6 py-4 hover:no-underline hover:bg-muted/50 data-[state=open]:bg-muted/50">
+                            <div className="flex items-center gap-3">
+                              <Puzzle className="h-5 w-5 text-teal-500" />
+                              <div className="text-left">
+                                <h3 className="text-base font-semibold">
+                                  {t("settings.advanced.claudePlugin.title")}
+                                </h3>
+                                <p className="text-sm text-muted-foreground font-normal">
+                                  {t(
+                                    "settings.advanced.claudePlugin.description",
+                                  )}
+                                </p>
+                              </div>
                             </div>
-                          </div>
-                        </AccordionTrigger>
-                        <AccordionContent className="px-6 pb-6 pt-4 border-t border-border/50">
-                          <ClaudePluginStatusPanel />
-                        </AccordionContent>
-                      </AccordionItem>
+                          </AccordionTrigger>
+                          <AccordionContent className="px-6 pb-6 pt-4 border-t border-border/50">
+                            <ClaudePluginStatusPanel />
+                          </AccordionContent>
+                        </AccordionItem>
+                      )}
 
                       <AccordionItem
                         value="directory"
@@ -507,7 +526,7 @@ export function SettingsPage({
                         </AccordionContent>
                       </AccordionItem>
 
-                      {ENABLE_CLOUD_SYNC && (
+                      {(ENABLE_CLOUD_SYNC || !forkEnabled) && (
                         <AccordionItem
                           value="cloudSync"
                           className="rounded-xl glass-card overflow-hidden"

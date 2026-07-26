@@ -374,6 +374,9 @@ export interface Settings {
   unifyCodexSessionHistory?: boolean;
   // User opted in (enable dialog checkbox) to migrate existing official sessions
   unifyCodexMigrateExisting?: boolean;
+  // 魔改功能总开关（fork 专属）：关闭后所有 fork 独有行为停用，回到与上游
+  // 原版一致的行为；配置数据全部保留。默认 true。
+  forkFeaturesEnabled?: boolean;
   // User has confirmed the failover toggle first-run notice
   failoverConfirmed?: boolean;
   // User has confirmed the first-run welcome notice

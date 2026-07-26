@@ -89,6 +89,10 @@ pub fn hash_content(content: &str) -> String {
 ///
 /// 缺省视为 `true`（保护默认开启，符合 §7.1 的产品决策）。
 pub fn get_protect_user_live_edits(db: &Database) -> bool {
+    // 魔改总开关关闭时，Live 保护整体让路给上游原版行为（直接覆盖写盘）。
+    if !crate::settings::fork_features_enabled() {
+        return false;
+    }
     match db.get_setting(PROTECT_USER_LIVE_EDITS_KEY) {
         Ok(Some(value)) => value == "true" || value == "1",
         // 缺省视为 true：保护默认开启；只有用户显式设置 "false"/"0" 才关闭。

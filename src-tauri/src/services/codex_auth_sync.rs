@@ -54,6 +54,10 @@ pub fn maybe_sync_codex_auth(
     if !matches!(app_type, AppType::Codex) {
         return;
     }
+    // 魔改总开关关闭时不做反向同步，行为回到上游原版
+    if !crate::settings::fork_features_enabled() {
+        return;
+    }
     // 用户在 auth.json 手填的官方 key 一经切换不覆盖
     if crate::settings::preserve_codex_official_auth_on_switch() {
         return;

@@ -362,15 +362,15 @@
 
       <div class="stats">
         <div class="stat">
-          <div class="num">26</div>
+          <div class="num">28</div>
           <div class="cap">魔改版独有的提交<br />（原版没有的改动记录）</div>
         </div>
         <div class="stat">
-          <div class="num">53</div>
-          <div class="cap">被碰过的文件<br />（新增 18 + 修改 35）</div>
+          <div class="num">62</div>
+          <div class="cap">被碰过的文件<br />（新增 20 + 修改 42）</div>
         </div>
         <div class="stat">
-          <div class="num good">+5499</div>
+          <div class="num good">+6859</div>
           <div class="cap">新增代码行</div>
         </div>
         <div class="stat">
@@ -391,16 +391,20 @@
         <ul>
           <li>
             <b>后端（Rust，程序的"发动机"）</b>：22 个文件，
-            <span class="good">+2591</span> 行 −57 行
+            <span class="good">+2663</span> 行 −40 行
           </li>
           <li>
-            <b>前端（界面，你点的按钮）</b>：18 个文件，
-            <span class="good">+1849</span> 行 −95 行
+            <b>前端（界面，你点的按钮）</b>：24 个文件，
+            <span class="good">+2006</span> 行 −95 行
           </li>
           <li>其余是文档、打包脚本、同步上游用的工具脚本</li>
         </ul>
         <p class="muted small">
           没有任何文件被整个删除（<code>git</code> 统计里删除文件数为 0）。
+        </p>
+        <p class="muted small">
+          <b>统计口径：</b>以上数字是本页所属版本发布时的快照，对比基准为上游
+          <code>b0482320</code>。后续提交会让数字继续变化，下次发版时本页会一并更新。
         </p>
       </div>
 
@@ -779,6 +783,27 @@
             </ul>
           </div>
         </details>
+      </div>
+
+      <div class="card accent">
+        <h3>🛟 后悔药：魔改功能总开关</h3>
+        <p>
+          担心魔改版出问题？<b>设置 → 通用 → 魔改功能</b>
+          里有一个总开关，关掉它，上面这 4
+          大功能会<b>全部停用</b>，应用立刻回到跟官方原版一样的行为：
+        </p>
+        <ul>
+          <li>统一网关拒绝所有请求（端口不再对外服务）</li>
+          <li>Live 配置保护不再拦截，写盘行为跟原版一致</li>
+          <li>Codex auth 反向同步不执行</li>
+          <li>魔改新增的设置面板全部隐藏</li>
+          <li>被魔改藏起来的原版入口（云同步）重新出现</li>
+        </ul>
+        <p class="good">
+          <b>配置数据一律保留</b
+          >——网关的模型别名表、Live 保护记录都还在数据库里躺着，把开关重新打开，
+          一切照旧。这不是卸载，只是"暂时按原版跑"。
+        </p>
       </div>
 
       <h2>3. 和官方原版的关系</h2>
