@@ -1,12 +1,19 @@
 blank_issues_enabled: false
 contact_links:
-  - name: "Security Vulnerabilities / 安全漏洞"
-    url: "https://github.com/farion1231/cc-switch/security/advisories/new"
+  - name: "上游原版的问题 / Issues with the original project"
+    url: "https://github.com/farion1231/cc-switch/issues"
     about: |
-      Report security vulnerabilities through GitHub Security Advisories.
-      请通过 GitHub 安全公告报告安全漏洞。
-  - name: "Discussions / 讨论区"
+      本仓库是 farion1231/cc-switch 的个人魔改 fork。
+      如果问题在官方原版里同样存在，请去上游反馈，那里才有维护团队。
+      This is a personal fork. If the issue also happens in the original
+      project, please report it upstream instead.
+  - name: "安全漏洞 / Security Vulnerabilities"
+    url: "https://github.com/qianbkk/cc-switch/security/advisories/new"
+    about: |
+      魔改版独有代码（统一网关 / Live 配置保护 / Codex auth 同步）的漏洞请报到这里。
+      上游原版代码的漏洞请报到 farion1231/cc-switch。
+  - name: "上游讨论区 / Upstream Discussions"
     url: "https://github.com/farion1231/cc-switch/discussions"
     about: |
-      General discussions and community help.
-      一般讨论和社区帮助。
+      产品用法等一般性讨论建议去上游讨论区，用户更多。
+      General discussions are better asked in the upstream community.

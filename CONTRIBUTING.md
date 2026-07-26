@@ -1,3 +1,19 @@
+> ### ⚠️ 这是魔改版 fork 的贡献指南
+>
+> 本仓库是 [farion1231/cc-switch](https://github.com/farion1231/cc-switch) 的个人魔改分支，**非官方**。
+>
+> - **想改进 CC Switch 本身的功能** → 请直接给[上游仓库](https://github.com/farion1231/cc-switch)提 PR，
+>   那才是所有用户都能受益的地方；本仓库会通过 `scripts/sync-upstream.sh` 同步过来
+> - **只想改魔改版独有的部分** → 欢迎在本仓库提 PR，请先读
+>   [docs/CUSTOM_FORK_PLAN.md](docs/CUSTOM_FORK_PLAN.md) 了解魔改的三条自律原则
+>   （尽量新增文件、隐藏功能只关开关不删代码、保持能一键同步上游）
+> - 提交前请跑：`cargo fmt --check`、`cargo clippy -- -D warnings`、
+>   `pnpm format:check`、`pnpm typecheck`、`cargo test`——CI 这几项任一不过都会 fail
+>
+> 下面是继承自上游的原始贡献指南，其中的链接指向上游仓库。
+
+---
+
 # Contributing to CC Switch
 
 > [中文版本](#贡献指南)

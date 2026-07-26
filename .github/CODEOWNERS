@@ -1,14 +1,12 @@
-# Code owners for cc-switch
+# Code owners for cc-switch（魔改版 fork）
 #
-# Branch protection on `main` has "Require review from Code Owners" enabled.
-# With this file present, a PR cannot merge to `main` without an approval from
-# the owner below. This closes the gap where two collaborators could approve
-# each other's malicious PRs (a single non-owner approval is no longer enough).
+# 这是 farion1231/cc-switch 的个人魔改 fork，所有者是本仓库主 @qianbkk。
+# 上游原版的 CODEOWNERS 指向 @farion1231，在 fork 里必须改掉——否则本仓库的
+# PR 会永远等一个不可能到来的审核。
 
-# Global fallback: every PR needs owner approval before merging to main.
-*                 @farion1231
+# 全局兜底：合并到 main 前需要仓库主审核。
+*                 @qianbkk
 
-# Most sensitive paths — CI/signing/release and the Rust backend. Listed
-# explicitly so they stay locked even if the global rule above is relaxed later.
-/.github/         @farion1231
-/src-tauri/       @farion1231
+# 最敏感的路径：CI / 发布流程 / Rust 后端。
+/.github/         @qianbkk
+/src-tauri/       @qianbkk

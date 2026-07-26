@@ -1,9 +1,13 @@
 name: Close Stale Issues
 
+# 魔改版 fork 说明：上游每天定时跑 stale-bot 自动关闭沉寂的 issue，那是给
+# issue 量大的官方仓库用的。个人 fork 的 issue 很少且往往是自己开的备忘，
+# 被自动关掉只会添乱——因此这里**停用了定时触发**，只保留手动触发。
+# 需要清理时到 Actions 页手动 Run workflow 即可。
+
 on:
-  schedule:
-    # Run daily at 00:00 UTC
-    - cron: '0 0 * * *'
+  # schedule:
+  #   - cron: '0 0 * * *'
   workflow_dispatch: # Allow manual trigger
 
 permissions:

@@ -1,3 +1,17 @@
+> ### ⚠️ 这是魔改版 fork 的安全策略
+>
+> 本仓库是 [farion1231/cc-switch](https://github.com/farion1231/cc-switch) 的个人魔改分支，**非官方**。
+>
+> - **魔改版独有代码的漏洞**（统一网关 `/gateway/*`、Live 配置保护、Codex auth 反向同步）
+>   → 报到 [本仓库的安全公告](https://github.com/qianbkk/cc-switch/security/advisories/new)
+> - **上游原版代码的漏洞** → 报到 [上游安全公告](https://github.com/farion1231/cc-switch/security/advisories/new)，
+>   那里才有维护团队，也能让所有用户受益
+> - 魔改版**不保证**安全更新时效性，仅供个人使用；对安全性有要求请用官方原版
+>
+> 下面是继承自上游的原始安全策略，其中的链接指向上游仓库。
+
+---
+
 # Security Policy / 安全策略
 
 ## Supported Versions / 支持的版本

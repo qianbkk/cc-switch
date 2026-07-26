@@ -235,6 +235,50 @@ GitHub Actions 自动 build → 8-15 分钟 → 在 [Releases 页](https://githu
 
 **配额**：GitHub 每月免费 2000 分钟，单次 Windows build 约 8-15 分钟（首次拉依赖 ~20 分钟），足够个人使用。
 
+## 9.6. Fork 仓库规范（与上游的边界）
+
+上游仓库的社区文件默认都指向 farion1231，直接继承到 fork 里会出错（PR 等不到
+审核、赞助按钮指向别人、安全漏洞报错地方）。已做如下 fork 化改造：
+
+| 文件 | 改动 | 原因 |
+|---|---|---|
+| `.github/CODEOWNERS` | `@farion1231` → `@qianbkk` | 否则本仓库 PR 永远等不到可能的审核 |
+| `.github/FUNDING.yml` | 已删除 | 魔改版已剔除赞助内容，不该再挂 Sponsor 按钮 |
+| `.github/ISSUE_TEMPLATE/config.yml` | 重写入口 | 安全问题走本仓库；上游问题引导去上游 |
+| `SECURITY.md` | 顶部加 fork 横幅 | 区分「魔改独有代码漏洞」和「上游代码漏洞」的报告去向 |
+| `SUPPORT.md` | 顶部加 fork 横幅 | 引导：怀疑魔改导致的先关总开关自测 |
+| `CONTRIBUTING.md` | 顶部加 fork 横幅 | 引导：改进产品本身请提给上游，魔改部分才提这里 |
+| `.github/workflows/stale.yml` | 注释掉 cron | 个人 fork 的 issue 很少，不该被机器人每天自动关 |
+| `.github/workflows/claude.yml` | step 级加 secret 判空 | fork 没有 `CLAUDE_CODE_OAUTH_TOKEN`，缺了会红；判空后跳过，配上自动生效 |
+
+**注意**：`secrets` 上下文在 **job 级 `if`** 里不可用（只支持 github/needs/vars/inputs），
+守卫必须写在 **step 级 `if`**，否则整个 workflow 会语法报错。
+
+**维护提醒**：这些文件被改过，未来 `sync-upstream.sh` 合并上游时可能冲突。
+冲突时的处理原则是**保留 fork 侧的身份信息**（CODEOWNERS 的 @qianbkk、各横幅），
+正文部分取上游的新版本。
+
+## 9.7. 魔改功能总开关
+
+**位置**：设置 → 通用 → 魔改功能 → 「启用魔改功能」
+
+**作用**：一键回退到上游原版行为，用于排查「问题是不是魔改引入的」。
+
+| 层 | 关闭时的行为 |
+|---|---|
+| 统一网关 | `authorize()` 前置守卫直接返回 403 |
+| Live 配置保护 | `get_protect_user_live_edits()` 返回 false，写盘不再校验 hash |
+| Codex auth 反向同步 | `maybe_sync_codex_auth()` 提前 return |
+| 魔改 UI | 4 个魔改面板（网关 / Copilot 优化 / 轻量模式 / Claude 插件状态）隐藏 |
+| 被隐藏的上游入口 | 云同步入口重新出现（`ENABLE_CLOUD_SYNC \|\| !forkEnabled`） |
+
+**数据**：一律保留，重新打开即恢复。这不是卸载，只是"暂时按原版跑"。
+
+**实现**：
+- 后端 `AppSettings.fork_features_enabled`（默认 true）+ `settings::fork_features_enabled()` 访问器
+- 各魔改入口统一调这个访问器做守卫
+- 前端 `settings.forkFeaturesEnabled`，`SettingsPage` 用 `forkEnabled` 控制面板显隐
+
 ## 10. 上游同步日志
 
 ### 2026-07-26 合入上游 v3.18.0（878c26f3）

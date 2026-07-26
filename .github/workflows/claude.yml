@@ -46,7 +46,11 @@ jobs:
           fetch-depth: 1
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
+      # 魔改版 fork 说明：fork 默认没有 CLAUDE_CODE_OAUTH_TOKEN，缺了它这一步
+      # 必然失败。加判空后没配 token 就跳过（job 显示成功），哪天在仓库
+      # Settings → Secrets 里配上会自动开始工作。
       - name: Run Claude (review only)
+        if: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
