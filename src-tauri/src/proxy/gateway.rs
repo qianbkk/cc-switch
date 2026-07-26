@@ -137,34 +137,37 @@ fn auth_error_response(status: StatusCode, msg: &str) -> Response {
 fn authorize(
     db: &crate::database::Database,
     headers: &HeaderMap,
-) -> Result<GatewayConfig, Response> {
+) -> Result<GatewayConfig, Box<Response>> {
     let cfg = load_gateway_config(db).map_err(|e| {
         log::error!("[Gateway] 加载配置失败: {e}");
-        auth_error_response(StatusCode::INTERNAL_SERVER_ERROR, "网关配置加载失败")
+        Box::new(auth_error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "网关配置加载失败",
+        ))
     })?;
 
     if !cfg.enabled {
-        return Err(auth_error_response(
+        return Err(Box::new(auth_error_response(
             StatusCode::FORBIDDEN,
             "网关未启用，请在设置中打开「统一网关」开关",
-        ));
+        )));
     }
 
     let client_key = match extract_client_key(headers) {
         Some(k) if !k.is_empty() => k,
         _ => {
-            return Err(auth_error_response(
+            return Err(Box::new(auth_error_response(
                 StatusCode::UNAUTHORIZED,
                 "缺少鉴权头（Authorization: Bearer <key> 或 x-api-key: <key>）",
-            ));
+            )));
         }
     };
 
     if client_key != cfg.api_key {
-        return Err(auth_error_response(
+        return Err(Box::new(auth_error_response(
             StatusCode::UNAUTHORIZED,
             "网关 key 无效",
-        ));
+        )));
     }
 
     Ok(cfg)
@@ -203,31 +206,34 @@ fn alias_not_found_response(aliases: Vec<String>) -> Response {
 fn load_provider(
     db: &crate::database::Database,
     entry: &GatewayModelEntry,
-) -> Result<Provider, Response> {
+) -> Result<Provider, Box<Response>> {
     let app_type = AppType::from_str(&entry.app_type).map_err(|_| {
-        auth_error_response(
+        Box::new(auth_error_response(
             StatusCode::BAD_REQUEST,
             &format!(
                 "非法 appType: {}（期望 claude | codex | gemini）",
                 entry.app_type
             ),
-        )
+        ))
     })?;
 
     let provider = db
         .get_provider_by_id(&entry.provider_id, app_type.as_str())
         .map_err(|e| {
             log::error!("[Gateway] 数据库读取 provider 失败: {e}");
-            auth_error_response(StatusCode::INTERNAL_SERVER_ERROR, "读取供应商失败")
+            Box::new(auth_error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "读取供应商失败",
+            ))
         })?
         .ok_or_else(|| {
-            auth_error_response(
+            Box::new(auth_error_response(
                 StatusCode::NOT_FOUND,
                 &format!(
                     "供应商不存在：provider_id={}, app_type={}",
                     entry.provider_id, entry.app_type
                 ),
-            )
+            ))
         })?;
 
     Ok(provider)
@@ -305,7 +311,7 @@ async fn forward_with_single_provider(
 /// - OpenAI Responses → Anthropic SSE → OpenAI Responses（流透传，因为双向同协议）
 /// - OpenAI Responses → Anthropic SSE → OpenAI Responses 客户端（流正常）
 /// - Gemini → Anthropic SSE → 入站（流正常）
-/// 缺口：Chat→Anthropic SSE、Anthropic→Chat SSE（暂 passthrough + warn）。
+/// - 缺口：Chat→Anthropic SSE、Anthropic→Chat SSE（暂 passthrough + warn）。
 async fn proxy_response_to_axum(
     resp: ProxyResponse,
     inbound: InboundProtocol,
@@ -467,17 +473,16 @@ fn convert_response_body(
     anthropic_to_inbound_json(canonical, inbound)
 }
 
+/// SSE 流类型：上游/入站方按字节读取的 stream。
+type SseStream =
+    std::pin::Pin<Box<dyn futures::Stream<Item = Result<Bytes, std::io::Error>> + Send>>;
+
 /// SSE 链式构造：上游 → Anthropic SSE → 入站 SSE
 fn build_inbound_sse_stream(
-    upstream: std::pin::Pin<Box<dyn futures::Stream<Item = Result<Bytes, std::io::Error>> + Send>>,
+    upstream: SseStream,
     upstream_format: Option<&str>,
     inbound: InboundProtocol,
-) -> Result<
-    std::pin::Pin<Box<dyn futures::Stream<Item = Result<Bytes, std::io::Error>> + Send>>,
-    ProxyError,
-> {
-    type SseStream =
-        std::pin::Pin<Box<dyn futures::Stream<Item = Result<Bytes, std::io::Error>> + Send>>;
+) -> Result<SseStream, ProxyError> {
     let anthropic_stream: SseStream = match upstream_format {
         None => upstream,
         Some("openai_responses") => {
@@ -557,7 +562,7 @@ pub async fn handle_gateway_models(
 ) -> Response {
     let cfg = match authorize(&state.db, &headers) {
         Ok(c) => c,
-        Err(resp) => return resp,
+        Err(resp) => return *resp,
     };
 
     let mut data: Vec<Value> = Vec::with_capacity(cfg.models.len());
@@ -607,7 +612,7 @@ async fn process_gateway_request(
     // 鉴权
     let cfg = match authorize(&state.db, &headers) {
         Ok(c) => c,
-        Err(resp) => return resp,
+        Err(resp) => return *resp,
     };
 
     // alias 匹配
@@ -642,7 +647,7 @@ async fn process_gateway_request(
     // 加载 provider
     let provider = match load_provider(&state.db, entry) {
         Ok(p) => p,
-        Err(resp) => return resp,
+        Err(resp) => return *resp,
     };
 
     let endpoint = proto.default_endpoint();

@@ -193,5 +193,5 @@ pub async fn ensure_gateway_started_on_startup(state: &AppState) {
 pub fn load_gateway_config(
     db: &crate::database::Database,
 ) -> Result<GatewayConfig, crate::error::AppError> {
-    load_or_init(db).map_err(|e| crate::error::AppError::Database(e))
+    load_or_init(db).map_err(crate::error::AppError::Database)
 }

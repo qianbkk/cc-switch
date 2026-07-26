@@ -11,9 +11,9 @@
 //! - message_start            → 首个 chunk（delta.role = assistant）
 //! - content_block_start(tool)→ delta.tool_calls[{index,id,function.name}]
 //! - content_block_delta:
-//!     text_delta             → delta.content 增量
-//!     input_json_delta       → delta.tool_calls[{index,function.arguments}] 增量
-//!     thinking_delta 等      → 丢弃（Chat 协议无对应表达）
+//!   - text_delta             → delta.content 增量
+//!   - input_json_delta       → delta.tool_calls[{index,function.arguments}] 增量
+//!   - thinking_delta 等      → 丢弃（Chat 协议无对应表达）
 //! - content_block_stop(tool) → 若 start 携带完整 input 且无增量，补发 arguments
 //! - message_delta            → 记录 stop_reason / usage
 //! - message_stop             → 终止 chunk（finish_reason）+ usage chunk + [DONE]
