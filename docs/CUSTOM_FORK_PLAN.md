@@ -203,23 +203,33 @@
 **为什么不复用上游 `release.yml`**：上游在 push `v*` tag 时跑完整 5 平台矩阵 + Apple/Windows 签名 + Tauri signing key，硬编码依赖 GitHub Secrets，没配就会失败。
 
 **专用 workflow**：`.github/workflows/release-portable.yml`
-- **trigger**: push tag 匹配 `custom-*` （如 `custom-v3.18.0-1`、`custom-v3.18.0-2`...，避免和未来上游 v3.x tag 冲突）
+- **trigger**: push tag 匹配 `m*`（如 `m3.18.0-1`、`m3.19.0-1`...）
 - **runner**: 单机 `windows-2022`
 - **产物**: `CC-Switch-{tag}-Windows-Portable.zip`（仅可执行 exe + `portable.ini` 标记）
 - **不签**: 跳过 `.msi` 安装器、Apple notarization、Tauri signing key；用环境变量 `CSC_IDENTITY_AUTO_DISCOVERY=false` 阻止 Tauri 找证书
+
+**Tag 命名规则**：
+
+- `m<upstream-version>-<patch>`
+- 例：基于 upstream v3.18.0 的第 1 个魔改版：`m3.18.0-1`
+- 合并 v3.19 后：`m3.19.0-1`...
+- `m` 前缀明确是 fork 用的魔改版本,**绝不与上游 `v3.x.y` 撞名**
+- 历史 `custom-v3.18.0-*` 标签保留（已下载用户的链接继续有效），但**不再发布新 `custom-*`**
 
 **发布命令**：
 
 ```bash
 # 在 main 分支(魔改主分支)上、状态干净时
 git checkout main
-git tag custom-v3.18.0-1
-git push origin custom-v3.18.0-1
+git tag m3.18.0-1
+git push origin m3.18.0-1
 ```
 
 GitHub Actions 自动 build → 8-15 分钟 → 在 [Releases 页](https://github.com/qianbkk/cc-switch/releases) 生成 pre-release → 下载 Portable.zip 解压双击 `CC Switch.exe` 即可。
 
 **版本号策略**：`Cargo.toml` / `package.json` / `tauri.conf.json` 保持 `3.18.0` 不变；魔改版版本号走 **tag 后缀**（`-1`、`-2`...）—— 这样永远跟上游版本对齐，避免合并后产生版本号分歧需要回填。
+
+**之前发的 `custom-v3.18.0-3` 处理**：保持原 release 不删（用户已下载链接有效），加 deprecation 注释（可选）。
 
 **Fork Actions 启用**：Settings → Actions → General → "Allow all actions and reusable workflows"（默认 fork 是关闭的）。
 

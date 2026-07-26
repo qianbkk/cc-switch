@@ -2,11 +2,17 @@
 #
 # 与上游 release.yml 互不干扰:
 #   - 上游 release.yml 在 push v* tag 时跑完整 5 平台矩阵 + Apple/Windows 签名
-#   - 此 workflow 在 push custom-* tag 时只跑 Windows Portable.zip(免安装、无需签名证书)
+#   - 此 workflow 在 push m* tag 时只跑 Windows Portable.zip(免安装、无需签名证书)
+#
+# Tag 命名规则:
+#   m<upstream-version>-<patch>
+#   例:m3.18.0-1(基于 upstream v3.18.0 的第 1 个魔改版),
+#      未来合 v3.19 后:m3.19.0-1;m<上游小版本> 与上游 v3.18.0 不会撞名。
+#   历史 custom-v3.18.0-* tag 保留(下载链接继续有效),但不建议再推新 custom-*。
 #
 # 用法:
-#   git tag custom-v3.18.0-1
-#   git push origin custom-v3.18.0-1
+#   git tag m3.18.0-1
+#   git push origin m3.18.0-1
 # 完成后到 https://github.com/qianbkk/cc-switch/releases 下载 zip
 
 name: Release Portable (Windows)
@@ -14,7 +20,7 @@ name: Release Portable (Windows)
 on:
   push:
     tags:
-      - 'custom-*'
+      - 'm*'
 
 permissions:
   contents: write
