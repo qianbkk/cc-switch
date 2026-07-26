@@ -258,3 +258,42 @@ GitHub Actions 自动 build → 8-15 分钟 → 在 [Releases 页](https://githu
 - `cargo check` 干净
 - `tsc --noEmit` 干净
 - 前端 `pnpm test:unit`：73 文件 462 通过 2 失败 —— 仅 `tests/integration/App.test.tsx` MSW 集成测试的两个用例在全套并发下超 5s 默认超时（单跑全过）。已确认非本次合并回归。
+
+### 2026-07-26 同步上游 b0482320（878c26f3..b0482320）
+
+**新增 4 commit**：
+
+| SHA | 类型 | 内容 |
+|---|---|---|
+| `b0482320` | chore | 5 家赞助商域名换 `.ai` 后缀（PackyCode、RightCode、ClaudeAPI→apito.ai、APINebula、SudoCode）+ 删 1 个失效 endpoint |
+| `9cf4ae41` | feat | 内置定价表加 `claude-opus-5`（$5/$25 MTok），仅 `schema.rs` +2 行，无 schema bump |
+| `876e9f89` | feat | 恢复 AICoding (aicoding.sh) 合作伙伴预设覆盖 7 个 app + 加进 3 README + zh/en/ja locale |
+| `414b7150` | ci | release 产物镜像到 Cloudflare R2（dl.ccswitch.io），新增 `scripts/generate-download-manifest.mjs`；无 R2 secrets 时自动跳过 |
+
+**冲突解决**（共 3 文件，README.md 6 处、其余 0）：
+
+1. **`README.md`** — 上游把赞助商列表塞进 fork 既有的 6 处段落（特性列表 / 截图区 / 三个魔改功能小节末尾 / 同步脚本段）。**全取 ours**，上游赞助段全剔除，魔改立场一致；AICoding 自然也在其中一并删。
+2. `README_DE.md` / `README_JA.md` / `README_ZH.md` — git 报"自动合并"，但 `876e9f89` 把 AICoding `<tr>` 块加进了三语赞助商表。手动从 `README_ZH.md` L84-87、`README_JA.md` L84-87 删除 AICoding 块（DE 此 commit 未涉 AICoding，无需动）。
+
+**Schema 状态**：仍 v18，新 commit 无 schema 改动。
+
+**自上游带来的关键能力**：
+- 5 家赞助商域名 `.com → .ai` 修复（防止失效 link）
+- `claude-opus-5` 价格条目（用户用量面板可自定义或默认同步）
+- Cloudflare R2 镜像（不影响 fork，仅上游官方下载用得到）
+
+**fork 独有保留**：
+- 顶部 fork 声明块（前 4 README 仍在）
+- 4 块魔改功能（统一网关 / Live 保护 / Codex auth 反向同步 / 3 隐藏 UI）
+- AICoding 合作伙伴**预设保留**（fork 的 7 个 presets 文件已含 AICoding 选项），仅从 3 个 README 删除推广段落
+
+**GitHub 状态**：
+- `upstream/main` HEAD = `b0482320`
+- `origin/upstream` HEAD = `b0482320`
+- `origin/main` HEAD = `a76e355c`（merge commit），已推
+
+**可视化**：`D:\AI\A_shared_workspace\.claude-viz\ccsync-b0482320-viz.html`
+
+**验证**：
+- `cargo check` Finished `dev` profile in **15.80s**（0 error）
+- `tsc --noEmit` 0 output（干净）
