@@ -364,3 +364,19 @@ jobs:
 **验证**：
 - `cargo check` Finished `dev` profile in **15.80s**（0 error）
 - `tsc --noEmit` 0 output（干净）
+
+---
+
+## 临时接续记录（2026-07-27）
+
+已完成并提交：文档事实修订、陈旧 PRD/设计稿归档、Vitest 补回 `src/**` 测试发现、App 集成测试局部超时预算、Codex `auth.json` 损坏内容保护与跨平台原子写复用。
+
+后续在其他设备上优先处理：
+
+1. **Vitest open handle**：关键前端用例 62/62 通过，但进程在输出总结后偶发不主动退出；排查 Tauri window mocks、MSW `list_profiles` 未处理请求及监听器清理。
+2. **完整验证**：重新执行 `pnpm test:unit`、`cargo test --lib`，必要时再跑完整 `cargo test`。
+3. **前端构建环境问题**：常规 `vite build` 曾在清理 `dist` 时触发 WorkBuddy safe-delete shim 超时；源码 transform 已完成，可在普通终端/CI 复验正式构建。
+4. **网关状态一致性**：`save_gateway_config` 当前先持久化 `enabled=true` 再启动代理；启动失败时应考虑回滚配置或调整事务顺序。
+5. **测试覆盖补强**：补 Live 保护状态机测试，以及网关真实 mock upstream 的非流式/SSE 协议矩阵测试。
+
+当前已知验证：TypeScript 类型检查通过；Codex auth 定点测试 8/8 通过；关键前端测试 62/62 用例通过；Rust 格式与 `git diff --check` 通过。
