@@ -20,20 +20,17 @@
 //! 4. 命中后改写 `body.model` 为真实模型名；从 DB 读 provider 记录，
 //!    走单 provider 候选列表调用现有 `RequestForwarder`（保留
 //!    熔断器 key `app_type:provider_id`，但跳过 failover 队列）
-//! 5. 上游响应**按原协议字节透传**给客户端（参照 `handle_chat_completions` 的
-//!    `process_response` 模式），不做协议重新整形：
+//! 5. 上游响应按入站协议反向转换后返回：
 //!
-//!    - 若 provider 的 `api_format` 与入站协议一致（典型：claude provider +
-//!      Anthropic 入站 → native Anthropic 上游），上行/下行协议天然对齐；
-//!    - 若不一致（Chat 入站 → Claude provider 上游），forwarder 的
-//!      `transform_claude_request_for_api_format` 会负责 **请求** 转换；
-//!      **响应** 反向转换留作 follow-up（前端会用 OpenAI Responses/Chat 客户端
-//!      接此类 provider 的 Anthropic 上游时，需要等服务端实现响应响应侧 transform）。
+//!    - 协议一致时直接透传，避免无谓解析；
+//!    - 非流式响应先归一为 Anthropic JSON，再转换为 Anthropic、OpenAI Chat
+//!      或 OpenAI Responses 目标格式；
+//!    - SSE 响应先归一为 Anthropic 事件流，再通过 `streaming_responses` 或
+//!      `streaming_anthropic_chat` 转成对应的入站协议；
+//!    - Gemini 上游复用 `streaming_gemini` / JSON 转换路径。
 //!
-//!    第一版 cut 选择 passthrough 的依据：尽快接通鉴权 + alias 路由 +
-//!    转发；响应侧协议镜像的 chat→anthropic / responses→anthropic 是更大的
-//!    工程量，需要对齐 `streaming_codex_anthropic` / `streaming_codex_chat` /
-//!    `streaming_responses` 的 SSE 转换。已在 follow-up 文档中列出。
+//!    因而当前网关同时覆盖三种入站协议与各 provider `api_format` 的请求、响应
+//!    双向转换；新增协议时必须同时补齐非流式和流式矩阵测试。
 
 use super::{
     forwarder::RequestForwarder,

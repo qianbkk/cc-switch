@@ -114,15 +114,15 @@
 
 ## 6. 当前工具链状态
 
-> `cargo build` 已通过；剩余待办是启动应用后的真实端到端冒烟。
+> 最近一次完整同步验证见本文末尾的同步记录；当前剩余待办是启动应用后的真实端到端冒烟。
 
-- ✅ Rust 1.95（~/.cargo/bin/cargo）
-- ✅ MSVC Build Tools（已装，cargo build 可用）
-- ✅ 4 端点 `cargo check` 零错误
-- ✅ Rust 全量库测试：2019 passed，2 ignored；网关路由冒烟测试 6 passed
-- ✅ 前端 TypeScript 类型检查通过（直接调用本地 `tsc`）
-- ⏸ 待办：实际 `cargo build` + 启动应用后的端到端冒烟（需要真实上游或 mock upstream）
-- ⏸ pnpm 的构建脚本审批仍需由用户决定，当前不影响直接 TypeScript 检查
+- ✅ MSVC Build Tools 可用，Rust `cargo check` / `cargo build` 已验证
+- ✅ 统一网关路由级鉴权、alias、model 冒烟测试已覆盖
+- ✅ 前端 TypeScript 类型检查已验证
+- ✅ 前端 Vitest 同时发现 `tests/**` 与 `src/**` 测试
+- ⏸ 待办：启动应用后的真实端到端冒烟（需要真实上游或 mock upstream）
+
+> 说明：测试总数会随上游同步增长，不在本节固定记录；以命令当次输出和下方按日期记录的验证快照为准。
 
 ## 7. 后续待办（按优先级）
 

@@ -1,7 +1,9 @@
-# 会话管理（Session Manager）需求文档（PRD / Markdown）
+# 会话管理（Session Manager）历史需求文档
 
-> 目标：对 **Codex / Claude Code** 的本地会话记录进行可视化管理，并提供“一键复制 / 一键终端恢复”能力。
-> 范围：**v1 仅 macOS**，但必须预留多平台扩展入口。
+> **归档说明（2026-07-27）**：本文是早期 PRD，描述的“仅 macOS、仅 Codex / Claude Code”范围已经落后于当前跨平台实现。保留用于追溯最初需求，不再作为当前行为或开发计划的依据；当前实现以 `src/components/sessions/`、`src-tauri/src/session_manager/` 及其测试为准。
+>
+> 原始目标：对 **Codex / Claude Code** 的本地会话记录进行可视化管理，并提供“一键复制 / 一键终端恢复”能力。
+> 原始范围：**v1 仅 macOS**，但必须预留多平台扩展入口。
 
 ---
 

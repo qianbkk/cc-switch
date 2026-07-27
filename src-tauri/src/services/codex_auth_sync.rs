@@ -20,8 +20,9 @@
 //! 读 / 写 / 解析任何一步失败都降级为 `log::warn!`，**不阻塞上层保存流程**。
 
 use crate::codex_config::get_codex_auth_path;
+use crate::config::atomic_write;
 use crate::error::AppError;
-use log::{debug, info, warn};
+use log::{debug, info};
 use serde_json::{Map, Value};
 use std::fs;
 use std::path::Path;
@@ -80,28 +81,23 @@ pub fn maybe_sync_codex_auth(
 
 /// 同上，但允许注入路径（用于测试）
 pub fn sync_codex_auth_at_path(auth_path: &Path, db_key: &str) -> Result<(), AppError> {
-    // 1. 读 auth.json（不存在或空 → 用空对象）
+    // 1. 读 auth.json（不存在或空 → 用空对象）。
+    // 已有非空文件若解析失败或顶层不是 object，必须保留原始内容并返回错误；
+    // 调用方会降级为 warning，但绝不能为了同步单个字段而覆盖用户凭据。
     let mut data: Value = if auth_path.exists() {
         match fs::read_to_string(auth_path) {
-            Ok(text) if !text.trim().is_empty() => match serde_json::from_str::<Value>(&text) {
-                Ok(v) if v.is_object() => v,
-                Ok(_) => {
-                    warn!(
-                        "[CodexAuthSync] auth.json 顶层不是 object，使用空对象覆盖（原始内容丢失）: {}",
+            Ok(text) if !text.trim().is_empty() => {
+                let parsed = serde_json::from_str::<Value>(&text)
+                    .map_err(|e| AppError::json(auth_path, e))?;
+                if !parsed.is_object() {
+                    return Err(AppError::InvalidInput(format!(
+                        "Codex auth.json 顶层必须是 JSON object，已保留原文件: {}",
                         auth_path.display()
-                    );
-                    Value::Object(Map::new())
+                    )));
                 }
-                Err(e) => {
-                    warn!(
-                        "[CodexAuthSync] auth.json 解析失败（{}），使用空对象覆盖: {}",
-                        e,
-                        auth_path.display()
-                    );
-                    Value::Object(Map::new())
-                }
-            },
-            Ok(_) => Value::Object(Map::new()), // 空文件
+                parsed
+            }
+            Ok(_) => Value::Object(Map::new()), // 空文件可安全初始化
             Err(e) => return Err(AppError::io(auth_path, e)),
         }
     } else {
@@ -128,34 +124,10 @@ pub fn sync_codex_auth_at_path(auth_path: &Path, db_key: &str) -> Result<(), App
         Value::String(db_key.to_string()),
     );
 
-    // 4. 原子写：先写临时文件再 rename
-    let parent = auth_path.parent().ok_or_else(|| {
-        AppError::Message(format!(
-            "auth.json path has no parent: {}",
-            auth_path.display()
-        ))
-    })?;
-    if !parent.exists() {
-        fs::create_dir_all(parent).map_err(|e| AppError::io(parent, e))?;
-    }
-
-    let file_name = auth_path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("auth.json");
-    // 加 pid 避免同一进程的两次同步并发；加时间戳让重试有唯一名
-    let temp_name = format!(
-        ".{}.tmp.{}.{}",
-        file_name,
-        std::process::id(),
-        chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
-    );
-    let temp_path = parent.join(&temp_name);
-
+    // 4. 复用项目统一的跨平台原子写实现，避免 Windows 上目标已存在时 rename 失败。
     let json_text = serde_json::to_string_pretty(&data)
         .map_err(|e| AppError::Message(format!("[CodexAuthSync] serialize failed: {e}")))?;
-    fs::write(&temp_path, json_text.as_bytes()).map_err(|e| AppError::io(&temp_path, e))?;
-    fs::rename(&temp_path, auth_path).map_err(|e| AppError::io(auth_path, e))?;
+    atomic_write(auth_path, json_text.as_bytes())?;
 
     info!("[CodexAuthSync] auth.json OPENAI_API_KEY 已同步为 DB（避免 Bug #3646）");
 
@@ -267,15 +239,15 @@ mod tests {
     }
 
     #[test]
-    fn handles_malformed_json() {
+    fn preserves_malformed_json_and_returns_error() {
         let path = tmp_path("malformed");
-        fs::write(&path, "this is not json { broken").unwrap();
+        let original = "this is not json { broken";
+        fs::write(&path, original).unwrap();
 
-        // 不 panic, 降级为警告，写盘
-        sync_codex_auth_at_path(&path, "sk-new").unwrap();
+        let result = sync_codex_auth_at_path(&path, "sk-new");
 
-        let data: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
-        assert_eq!(data["OPENAI_API_KEY"], "sk-new");
+        assert!(result.is_err());
+        assert_eq!(fs::read_to_string(&path).unwrap(), original);
         cleanup(&path);
     }
 
@@ -292,16 +264,15 @@ mod tests {
     }
 
     #[test]
-    fn handles_top_level_array() {
-        // 非预期的顶层类型（有人手残写了 [...] 当 auth.json）也要安全降级
+    fn preserves_top_level_array_and_returns_error() {
         let path = tmp_path("array");
-        fs::write(&path, "[1, 2, 3]").unwrap();
+        let original = "[1, 2, 3]";
+        fs::write(&path, original).unwrap();
 
-        sync_codex_auth_at_path(&path, "sk-new").unwrap();
+        let result = sync_codex_auth_at_path(&path, "sk-new");
 
-        let data: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
-        assert!(data.is_object(), "顶层被规范为 object");
-        assert_eq!(data["OPENAI_API_KEY"], "sk-new");
+        assert!(result.is_err());
+        assert_eq!(fs::read_to_string(&path).unwrap(), original);
         cleanup(&path);
     }
 

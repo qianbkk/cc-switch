@@ -14,7 +14,7 @@
 
 ## 什么是魔改版
 
-这是 cc-switch 上游的本地分支，仅用于**本人**日常使用，不对外发布。主要改动：
+这是 cc-switch 上游的个人魔改分支，主要用于**本人**日常使用；`m*` tag 会发布 Windows Portable 预发行包。主要改动：
 
 - **统一网关**(`/gateway/*`)：把多个供应商聚合成一个 OpenAI 兼容端点,任意客户端配一次 key+地址就能跨模型调度
 - **Live 配置保护**：用户手改 `~/.codex/config.toml` 等 live 文件后，接管/切换不再覆盖,带冲突提示 toast 与一键开关
@@ -49,7 +49,7 @@ CC Switch 用一个桌面应用统一管理:50+ 内置供应商预设、一键�
 
 上游的代理每个应用走各自端点。魔改版加了 `/gateway/*`,把多个供应商聚合成**一个 OpenAI 兼容端点**:任一客户端(Claude Code / 自研脚本 / IDE 插件)配一个地址 + 一个 key,就能调所有供应商。
 
-- 4 个路由:`/gateway/v1/messages`、`/chat/completions`、`/responses`、`/models`
+- 4 个路由:`/gateway/v1/messages`、`/gateway/v1/chat/completions`、`/gateway/v1/responses`、`/gateway/v1/models`
 - 鉴权:`Authorization: Bearer <key>` 或 `x-api-key: <key>`,启动时自动生成 `ccs-` 前缀 48 位 hex
 - 模型通过 `body.model` 精确匹配 alias 表,未命中返回可用列表
 - 协议转换走「上游协议 → Anthropic 中间表示 → 入站协议」的链式两步,复用上游已有的 3 个转换器,只补缺失的 Anthropic→Chat 一环就凑齐 3 入站 × 4 上游全部 12 种组合
@@ -182,7 +182,7 @@ CC_SWITCH_GDK_BACKEND=wayland ./CC-Switch-*.AppImage
 
 ### Windows
 
-[Releases](../../releases) 页下 `CC-Switch-v{version}-Windows.msi` 或 portable `.zip`。
+本 fork 的 [Releases](../../releases) 提供 `CC-Switch-m{upstream-version}-{patch}-Windows-Portable.zip`（预发行、免安装）；MSI 等正式安装包请使用上游 Release。
 
 ### macOS
 
@@ -280,14 +280,14 @@ src/                        # 前端 (React + TS)
     └── lightweight.ts      # 🆕
 
 src-tauri/src/
+├── live_protection.rs                   # 🆕 Live 文件 SHA256 保护
 ├── proxy/
-│   ├── gateway.rs                       # 🆕 统一网关 808 行
-│   ├── providers/streaming_anthropic_chat.rs  # 🆕 Chat↔Anthropic SSE
-│   └── live_protection.rs               # 🆕
+│   ├── gateway.rs                       # 🆕 统一网关
+│   └── providers/streaming_anthropic_chat.rs  # 🆕 Chat↔Anthropic SSE
 ├── services/
 │   └── codex_auth_sync.rs               # 🆕
 ├── commands/gateway.rs                  # 🆕
-└── database/schema.rs                   # 🆕 DB 迁移 v15→v16→v17
+└── database/schema.rs                   # 🆕 fork 迁移 v15→v16→v17；当前 Schema v18
 
 scripts/sync-upstream.sh                 # 🆕 一键同步上游
 docs/CUSTOM_FORK_PLAN.md                 # 🆕 规划文档
@@ -299,4 +299,4 @@ docs/CUSTOM_FORK_PLAN.md                 # 🆕 规划文档
 
 MIT © Jason Young
 
-魔改版变更在原协议下分发,无任何额外限制。仅限个人使用,不在此处提供 release 安装包——需要二进制请用上游发布版。
+魔改版变更在原协议下分发,无任何额外限制。个人 fork 的 `m*` tag 仅提供 Windows Portable 预发行包；macOS、Linux 与正式安装包请使用上游发布版。

@@ -1,4 +1,6 @@
-# 2026-07-26 — 魔改版 vs 原版 可视化集成 设计
+# 2026-07-26 — 魔改版 vs 原版 可视化集成（历史设计）
+
+> **归档说明（2026-07-27）**：功能已经实施，但最终方案与本文不同：HTML 实际位于 `src-tauri/assets/FORK_CHANGES.html`，通过 `include_str!` 编译进二进制，`open_fork_changes_html` 将内容写入临时文件后由系统浏览器打开；前端调用封装位于 `src/lib/api/settings.ts`。本文保留为设计演进记录，不作为当前路径或 API 的依据。
 
 ## 1. 目标
 
