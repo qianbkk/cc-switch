@@ -367,16 +367,23 @@ jobs:
 
 ---
 
-## 临时接续记录（2026-07-27）
+## 接续完成记录（2026-07-28）
 
-已完成并提交：文档事实修订、陈旧 PRD/设计稿归档、Vitest 补回 `src/**` 测试发现、App 集成测试局部超时预算、Codex `auth.json` 损坏内容保护与跨平台原子写复用。
+本轮已完成：
 
-后续在其他设备上优先处理：
+1. **前端测试基础设施**：补齐 Tauri window mock、`list_profiles` / `auth_get_status` / `get_installed_skills` handlers，并在测试间清空 Tauri 事件监听器；App 集成测试不再输出 window metadata 与 profile 未处理请求警告。
+2. **网关状态一致性**：启用网关时若代理启动失败，持久化配置自动回滚为 `enabled=false`，同时保留 API key 和模型映射；新增回归测试。
+3. **Live 保护覆盖**：补齐 `managed_hash` 优先、空值回退、老数据无 hash 放行、磁盘 hash 缺失/变化拒绝等状态测试。
+4. **完整验证**：
+   - TypeScript `tsc --noEmit` 通过；
+   - 前端 79 个文件、522 个用例全部通过；
+   - Rust 库测试 2207 通过、2 忽略、0 失败；
+   - `cargo check` 通过；
+   - 前端生产构建成功（WorkBuddy 环境需用 `vite build --emptyOutDir=false` 绕过安全删除 shim，3314 modules transformed）；
+   - Rust/Prettier 格式与 `git diff --check` 通过。
 
-1. **Vitest open handle**：关键前端用例 62/62 通过，但进程在输出总结后偶发不主动退出；排查 Tauri window mocks、MSW `list_profiles` 未处理请求及监听器清理。
-2. **完整验证**：重新执行 `pnpm test:unit`、`cargo test --lib`，必要时再跑完整 `cargo test`。
-3. **前端构建环境问题**：常规 `vite build` 曾在清理 `dist` 时触发 WorkBuddy safe-delete shim 超时；源码 transform 已完成，可在普通终端/CI 复验正式构建。
-4. **网关状态一致性**：`save_gateway_config` 当前先持久化 `enabled=true` 再启动代理；启动失败时应考虑回滚配置或调整事务顺序。
-5. **测试覆盖补强**：补 Live 保护状态机测试，以及网关真实 mock upstream 的非流式/SSE 协议矩阵测试。
+仍保留的低优先级事项：
 
-当前已知验证：TypeScript 类型检查通过；Codex auth 定点测试 8/8 通过；关键前端测试 62/62 用例通过；Rust 格式与 `git diff --check` 通过。
+- 完整 Vitest 套件会在打印 79/79、522/522 通过总结后保留进程句柄；App 单文件已能正常结束，且切换 threads/forks/singleFork 均不能消除，后续应按测试文件二分定位具体资源泄漏源。
+- 网关已有大量转换单测和路由冒烟测试，仍可进一步补真实 mock upstream 的跨协议非流式/SSE 端到端矩阵。
+- 前端主 chunk 约 4.28 MB（gzip 约 1.26 MB），后续可按设置页/会话页做代码分割，但不影响本轮正确性。

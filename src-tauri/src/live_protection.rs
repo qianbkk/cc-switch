@@ -108,6 +108,20 @@ pub fn set_protect_user_live_edits(db: &Database, enabled: bool) -> Result<(), A
     )
 }
 
+fn expected_live_hash<'a>(
+    managed_hash: Option<&'a str>,
+    original_hash: Option<&'a str>,
+) -> Option<&'a str> {
+    managed_hash
+        .filter(|hash| !hash.trim().is_empty())
+        .or_else(|| original_hash.filter(|hash| !hash.trim().is_empty()))
+        .map(str::trim)
+}
+
+fn live_hash_was_modified(expected: Option<&str>, actual: Option<&str>) -> bool {
+    expected.is_some_and(|expected| actual != Some(expected))
+}
+
 /// 检查用户是否在接管后修改了指定应用的 live 文件。
 ///
 /// 规则：
@@ -139,29 +153,25 @@ pub async fn check_user_modified(db: &Database, app_type: &str) -> Result<(), Ap
         }
     };
 
-    let expected = backup
-        .managed_hash
-        .as_deref()
-        .or(backup.original_hash.as_deref())
-        .unwrap_or("")
-        .trim();
-    if expected.is_empty() {
+    let expected = expected_live_hash(
+        backup.managed_hash.as_deref(),
+        backup.original_hash.as_deref(),
+    );
+    if expected.is_none() {
         // 迁移期老数据：备份无 hash。无法校验，放行（保持历史行为）。
         return Ok(());
     }
 
     let actual = compute_file_hash(&path);
-    let actual_str = actual.as_deref().unwrap_or("");
-
-    if actual_str == expected {
-        Ok(())
-    } else {
+    if live_hash_was_modified(expected, actual.as_deref()) {
         Err(AppError::LiveConfigModifiedByUser {
             app_type: app_type.to_string(),
             path: path.display().to_string(),
-            expected_hash: Some(expected.to_string()),
+            expected_hash: expected.map(str::to_string),
             actual_hash: actual,
         })
+    } else {
+        Ok(())
     }
 }
 
@@ -196,5 +206,34 @@ mod tests {
         let h_str = hash_content("{\"x\":1}");
         assert_eq!(h_file, h_str);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn managed_hash_takes_precedence_over_original_hash() {
+        assert_eq!(
+            expected_live_hash(Some(" managed "), Some("original")),
+            Some("managed")
+        );
+    }
+
+    #[test]
+    fn empty_managed_hash_falls_back_to_original_hash() {
+        assert_eq!(
+            expected_live_hash(Some("  "), Some(" original ")),
+            Some("original")
+        );
+    }
+
+    #[test]
+    fn missing_expected_hash_allows_legacy_backup() {
+        assert_eq!(expected_live_hash(None, Some("  ")), None);
+        assert!(!live_hash_was_modified(None, Some("actual")));
+    }
+
+    #[test]
+    fn missing_or_different_actual_hash_is_modified() {
+        assert!(live_hash_was_modified(Some("expected"), None));
+        assert!(live_hash_was_modified(Some("expected"), Some("different")));
+        assert!(!live_hash_was_modified(Some("expected"), Some("expected")));
     }
 }

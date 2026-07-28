@@ -43,6 +43,10 @@ export const emitTauriEvent = (event: string, payload: unknown) => {
   handlers?.forEach((handler) => handler({ payload }));
 };
 
+export const resetTauriEventListeners = () => {
+  listeners.clear();
+};
+
 vi.mock("@tauri-apps/api/event", () => ({
   listen: async (
     event: string,
@@ -58,6 +62,14 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 // Ensure the MSW server is referenced so tree shaking doesn't remove imports
 void server;
+
+vi.mock("@tauri-apps/api/window", () => ({
+  getCurrentWindow: () => ({
+    isMaximized: async () => false,
+    onResized: async () => () => undefined,
+    setDecorations: async () => undefined,
+  }),
+}));
 
 vi.mock("@tauri-apps/api/path", () => ({
   homeDir: async () => "/home/mock",

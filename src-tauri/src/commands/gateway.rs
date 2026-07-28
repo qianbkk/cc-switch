@@ -103,6 +103,15 @@ fn persist(db: &crate::database::Database, cfg: &GatewayConfig) -> Result<(), St
         .map_err(|e| format!("写入设置失败: {e}"))
 }
 
+fn persist_disabled_after_start_failure(
+    db: &crate::database::Database,
+    cfg: &GatewayConfig,
+) -> Result<(), String> {
+    let mut disabled = cfg.clone();
+    disabled.enabled = false;
+    persist(db, &disabled)
+}
+
 /// 获取网关配置；首次未存时生成默认并持久化后返回。
 #[tauri::command]
 pub async fn get_gateway_config(state: State<'_, AppState>) -> Result<GatewayConfig, String> {
@@ -113,7 +122,9 @@ pub async fn get_gateway_config(state: State<'_, AppState>) -> Result<GatewayCon
 ///
 /// - 保存到 settings KV
 /// - 若 `enabled=true` 且代理当前未运行，则启动代理（不带 Live 接管，
-///   仅暴露 `/gateway/*` 端点），启动失败仍返回错误。
+///   仅暴露 `/gateway/*` 端点）
+/// - 启动失败时保留 key / 模型映射，但把持久化的 `enabled` 回滚为 false，
+///   避免 UI 与实际运行状态分裂
 #[tauri::command]
 pub async fn save_gateway_config(
     config: GatewayConfig,
@@ -134,6 +145,11 @@ pub async fn save_gateway_config(
             }
             Err(e) => {
                 log::error!("[Gateway] 启用时启动代理失败: {e}");
+                if let Err(rollback_error) =
+                    persist_disabled_after_start_failure(&state.db, &config)
+                {
+                    return Err(format!("{e}；同时回滚网关启用状态失败: {rollback_error}"));
+                }
                 return Err(e);
             }
         }
@@ -194,4 +210,33 @@ pub fn load_gateway_config(
     db: &crate::database::Database,
 ) -> Result<GatewayConfig, crate::error::AppError> {
     load_or_init(db).map_err(crate::error::AppError::Database)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn start_failure_disables_gateway_but_preserves_user_config() {
+        let db = crate::database::Database::memory().expect("memory database");
+        let config = GatewayConfig {
+            enabled: true,
+            api_key: "ccs-test-key".to_string(),
+            models: vec![GatewayModelEntry {
+                alias: "demo/model".to_string(),
+                provider_id: "provider-1".to_string(),
+                app_type: "codex".to_string(),
+                model: "model-1".to_string(),
+            }],
+        };
+        persist(&db, &config).expect("persist enabled config");
+
+        persist_disabled_after_start_failure(&db, &config).expect("rollback enabled state");
+
+        let stored = load_or_init(&db).expect("load rolled back config");
+        assert!(!stored.enabled);
+        assert_eq!(stored.api_key, config.api_key);
+        assert_eq!(stored.models.len(), 1);
+        assert_eq!(stored.models[0].alias, "demo/model");
+    }
 }

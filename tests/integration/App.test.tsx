@@ -146,14 +146,20 @@ vi.mock("@/components/mcp/McpPanel", () => ({
 }));
 
 const renderApp = (AppComponent: ComponentType) => {
-  const client = new QueryClient();
-  return render(
+  const client = new QueryClient({
+    defaultOptions: {
+      queries: { gcTime: Infinity },
+      mutations: { gcTime: Infinity },
+    },
+  });
+  const rendered = render(
     <QueryClientProvider client={client}>
       <Suspense fallback={<div data-testid="loading">loading</div>}>
         <AppComponent />
       </Suspense>
     </QueryClientProvider>,
   );
+  return { ...rendered, client };
 };
 
 describe("App integration with MSW", { timeout: 15_000 }, () => {
