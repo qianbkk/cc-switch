@@ -130,6 +130,8 @@ export const handlers = [
   }),
 
   http.post(`${TAURI_ENDPOINT}/open_external`, () => success(true)),
+  http.post(`${TAURI_ENDPOINT}/check_fork_update`, () => success(null)),
+  http.post(`${TAURI_ENDPOINT}/open_fork_release`, () => success(true)),
 
   http.post(`${TAURI_ENDPOINT}/list_sessions`, () => success(listSessions())),
 

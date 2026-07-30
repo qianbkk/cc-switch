@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { exit } from "@tauri-apps/plugin-process";
 import {
   Database,
@@ -13,8 +12,9 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { checkForUpdate, openForkRelease } from "@/lib/updater";
 
-const RELEASES_URL = "https://github.com/farion1231/cc-switch/releases";
+const RELEASES_URL = "https://github.com/qianbkk/cc-switch/releases";
 
 interface DatabaseUpgradeProps {
   payload: {
@@ -26,33 +26,27 @@ interface DatabaseUpgradeProps {
   };
 }
 
-// checking: 启动时检查是否有可用更新
-// upgradable: 有可用更新，升级应用即可解决
-// incompatible: 已是最新版本但数据库仍过新（可能来自第三方客户端），升级无法解决
-// updating: 正在下载/安装更新
-// error: 升级过程出错
-type Phase = "checking" | "upgradable" | "incompatible" | "updating" | "error";
-
-interface DownloadProgress {
-  downloaded: number;
-  total: number | null;
-}
+// checking: 启动时检查是否有可用魔改版更新
+// upgradable: 有可用更新，可前往魔改版 Release 下载
+// incompatible: 已是最新魔改版但数据库仍过新，升级无法解决
+// opening: 正在打开发布页
+// error: 检查或打开发布页出错
+type Phase = "checking" | "upgradable" | "incompatible" | "opening" | "error";
 
 /**
  * 数据库版本过新（应用过旧）时的应用内恢复界面。
  *
- * 启动时先检查是否有可用更新：
- * - 有 → 提供「升级应用」一键下载+安装+重启，并展示下载进度条。
- * - 无 → 说明当前已是最新版本但数据库仍不兼容（通常由第三方客户端或更高版本创建），
- *   升级无法解决，及时提醒用户备份后改用兼容客户端或等待官方支持。
+ * 启动时先检查魔改仓库是否有可用预发行版：
+ * - 有 → 提供对应 Release 下载入口。魔改版当前发布 Portable.zip，不伪装成可自动安装。
+ * - 无 → 说明当前已是最新魔改版但数据库仍不兼容（通常由第三方客户端或更高版本创建），
+ *   升级无法解决，及时提醒用户备份后改用兼容客户端或等待新版支持。
  */
 export function DatabaseUpgrade({ payload }: DatabaseUpgradeProps) {
   const { t } = useTranslation();
   const [phase, setPhase] = useState<Phase>("checking");
   const [availableVersion, setAvailableVersion] = useState<string | null>(null);
-  const [progress, setProgress] = useState<DownloadProgress | null>(null);
+  const [releaseUrl, setReleaseUrl] = useState<string | undefined>(undefined);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const unlistenRef = useRef<(() => void) | null>(null);
 
   const dbVersion = payload.db_version;
   const supportedVersion = payload.supported_version;
@@ -62,12 +56,11 @@ export function DatabaseUpgrade({ payload }: DatabaseUpgradeProps) {
     let cancelled = false;
     (async () => {
       try {
-        const version = await invoke<string | null>(
-          "check_app_update_available",
-        );
+        const result = await checkForUpdate({ timeout: 30000 });
         if (cancelled) return;
-        if (version) {
-          setAvailableVersion(version);
+        if (result.status === "available") {
+          setAvailableVersion(result.info.availableVersion);
+          setReleaseUrl(result.info.releaseUrl);
           setPhase("upgradable");
         } else {
           setPhase("incompatible");
@@ -82,44 +75,17 @@ export function DatabaseUpgrade({ payload }: DatabaseUpgradeProps) {
     };
   }, []);
 
-  useEffect(() => {
-    return () => {
-      unlistenRef.current?.();
-    };
-  }, []);
-
   const startUpgrade = useCallback(async () => {
-    setPhase("updating");
-    setProgress(null);
+    setPhase("opening");
     setErrorMsg(null);
     try {
-      unlistenRef.current?.();
-      unlistenRef.current = await listen<DownloadProgress>(
-        "update-download-progress",
-        (e) => setProgress(e.payload),
-      );
-      // 成功时后端会下载+安装+重启，不会返回；返回 false 表示无可用更新。
-      const updating = await invoke<boolean>("install_update_and_restart");
-      unlistenRef.current?.();
-      unlistenRef.current = null;
-      if (!updating) {
-        // 竞态：检查时有更新、安装时已无 → 按不兼容处理
-        setPhase("incompatible");
-      }
-      // updating === true：应用即将重启，保持 updating 态直到进程退出。
+      await openForkRelease(releaseUrl);
+      setPhase("upgradable");
     } catch (e) {
-      unlistenRef.current?.();
-      unlistenRef.current = null;
       setErrorMsg(e instanceof Error ? e.message : String(e));
       setPhase("error");
     }
-  }, []);
-
-  const percent =
-    progress && progress.total && progress.total > 0
-      ? Math.min(100, Math.round((progress.downloaded / progress.total) * 100))
-      : null;
-  const fmtMB = (n: number) => (n / 1024 / 1024).toFixed(1);
+  }, [releaseUrl]);
 
   const isIncompatible = phase === "incompatible";
   const accent = isIncompatible
@@ -208,36 +174,11 @@ export function DatabaseUpgrade({ payload }: DatabaseUpgradeProps) {
           </div>
         )}
 
-        {phase === "updating" && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-sm">
-              <span className="flex items-center gap-2 text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                {percent === null
-                  ? t("dbUpgrade.preparing", "正在准备更新…")
-                  : t("dbUpgrade.downloading", "正在下载更新…")}
-              </span>
-              {percent !== null && (
-                <span className="tabular-nums text-muted-foreground">
-                  {percent}%
-                </span>
-              )}
-            </div>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-              <div
-                className={`h-full rounded-full bg-amber-500 transition-all duration-200 ${
-                  percent === null ? "w-1/3 animate-pulse" : ""
-                }`}
-                style={percent === null ? undefined : { width: `${percent}%` }}
-              />
-            </div>
-            {progress && (
-              <p className="text-right text-xs tabular-nums text-muted-foreground">
-                {fmtMB(progress.downloaded)} MB
-                {progress.total ? ` / ${fmtMB(progress.total)} MB` : ""}
-              </p>
-            )}
-          </div>
+        {phase === "opening" && (
+          <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            {t("dbUpgrade.preparing", "正在打开魔改版发布页…")}
+          </p>
         )}
 
         {phase === "error" && errorMsg && (
@@ -258,8 +199,8 @@ export function DatabaseUpgrade({ payload }: DatabaseUpgradeProps) {
                 <Download className="h-4 w-4" />
               )}
               {phase === "error"
-                ? t("dbUpgrade.retry", "重试升级")
-                : t("dbUpgrade.upgradeNow", "升级应用")}
+                ? t("dbUpgrade.retry", "重试打开")
+                : t("dbUpgrade.upgradeNow", "下载魔改版")}
             </Button>
           )}
 
@@ -280,7 +221,7 @@ export function DatabaseUpgrade({ payload }: DatabaseUpgradeProps) {
             variant="outline"
             className="gap-2"
             onClick={() => void invoke("open_app_config_folder")}
-            disabled={phase === "updating"}
+            disabled={phase === "opening"}
           >
             <FolderOpen className="h-4 w-4" />
             {t("dbUpgrade.openConfigDir", "打开配置目录")}
@@ -290,7 +231,7 @@ export function DatabaseUpgrade({ payload }: DatabaseUpgradeProps) {
             variant="ghost"
             className="ml-auto text-muted-foreground"
             onClick={() => void exit(0)}
-            disabled={phase === "updating"}
+            disabled={phase === "opening"}
           >
             {t("dbUpgrade.quit", "退出")}
           </Button>

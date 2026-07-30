@@ -1,4 +1,8 @@
 fn main() {
+    let fork_release_tag = std::env::var("CC_SWITCH_FORK_RELEASE_TAG").unwrap_or_default();
+    println!("cargo:rustc-env=CC_SWITCH_FORK_RELEASE_TAG={fork_release_tag}");
+    println!("cargo:rerun-if-env-changed=CC_SWITCH_FORK_RELEASE_TAG");
+
     tauri_build::build();
 
     // Windows: Embed Common Controls v6 manifest for test binaries

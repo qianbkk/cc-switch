@@ -61,6 +61,10 @@ export const settingsApi = {
     await invoke("check_for_updates");
   },
 
+  async openForkRelease(releaseUrl?: string): Promise<void> {
+    await invoke("open_fork_release", { releaseUrl });
+  },
+
   async isPortable(): Promise<boolean> {
     return await invoke("is_portable_mode");
   },

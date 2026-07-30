@@ -1,7 +1,7 @@
 # CC Switch 魔改版 — 总体规划与执行状态
 
 > 本文档是本地魔改版（`main` 分支，原 custom 分支）的唯一规划文档，供后续会话/开发接续执行。
-> 最近更新：2026-07-26（合入上游 v3.18.0，Schema v18；分支重命名 custom→main）
+> 最近更新：2026-07-27（应用内更新切换为魔改仓库 m* 预发行版；保留 v3.18.0 / Schema v18 基线）
 
 ---
 
@@ -206,7 +206,9 @@
 - **trigger**: push tag 匹配 `m*`（如 `m3.18.0-1`、`m3.19.0-1`...）
 - **runner**: 单机 `windows-2022`
 - **产物**: `CC-Switch-{tag}-Windows-Portable.zip`（仅可执行 exe + `portable.ini` 标记）
+- **版本嵌入**: workflow 将当前 `m*` tag 通过 `CC_SWITCH_FORK_RELEASE_TAG` 编译进二进制，应用据此比较魔改修订号
 - **不签**: 跳过 `.msi` 安装器、Apple notarization、Tauri signing key；用环境变量 `CSC_IDENTITY_AUTO_DISCOVERY=false` 阻止 Tauri 找证书
+- **应用内更新**: 只查询 `qianbkk/cc-switch` 的 `m*` pre-release；发现新版后打开对应 Release 下载 Portable.zip，不再查询或安装上游 `farion1231/cc-switch` 版本
 
 **Tag 命名规则**：
 

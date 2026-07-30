@@ -1357,6 +1357,8 @@ pub fn run() {
             commands::restart_app,
             commands::install_update_and_restart,
             commands::check_app_update_available,
+            commands::check_fork_update,
+            commands::open_fork_release,
             commands::check_for_updates,
             commands::is_portable_mode,
             commands::copy_text_to_clipboard,
