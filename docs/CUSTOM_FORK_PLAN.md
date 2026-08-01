@@ -1,9 +1,17 @@
 # CC Switch 魔改版 — 总体规划与执行状态
 
 > 本文档是本地魔改版（`main` 分支，原 custom 分支）的唯一规划文档，供后续会话/开发接续执行。
-> 最近更新：2026-07-27（应用内更新切换为魔改仓库 m* 预发行版；保留 v3.18.0 / Schema v18 基线）
+> 最近更新：2026-07-28（同步上游 v3.19.1 与发布后主线修复；保留 Schema v18 和全部魔改功能）
 
 ---
+
+## 2026-07-28 上游同步记录
+
+- 上游追踪分支已同步到 `farion1231/cc-switch` 的 `ebbf141f`，包含 v3.19.0、v3.19.1 及发布后的赞助商清理提交。
+- 合入上游安全修复：Skill zip-slip 与凭据泄漏防护、SQL 导入跨文件限制、深链导入风险提示与禁用 usage script、终端路径转义修复。
+- 合入 Codex / Grok Build / 代理 / 用量统计与模型定价更新，包括 DeepSeek、火山 Agentplan、腾讯混元 TokenHub 原生 Responses 支持。
+- 保留魔改的统一网关、Live 配置保护、Codex auth 保护开关、魔改总开关与隐藏功能 UI、fork `m*` 预发行版更新和 Portable 发布流程。
+- 数据库结构版本仍为 Schema v18；本次只有数据种子与运行时修复，无新增结构迁移。
 
 ## 1. 项目背景与目标
 
@@ -203,7 +211,7 @@
 **为什么不复用上游 `release.yml`**：上游在 push `v*` tag 时跑完整 5 平台矩阵 + Apple/Windows 签名 + Tauri signing key，硬编码依赖 GitHub Secrets，没配就会失败。
 
 **专用 workflow**：`.github/workflows/release-portable.yml`
-- **trigger**: push tag 匹配 `m*`（如 `m3.18.0-1`、`m3.19.0-1`...）
+- **trigger**: push tag 匹配 `m*`（如 `m3.19.1-1`、`m3.19.1-2`...）
 - **runner**: 单机 `windows-2022`
 - **产物**: `CC-Switch-{tag}-Windows-Portable.zip`（仅可执行 exe + `portable.ini` 标记）
 - **版本嵌入**: workflow 将当前 `m*` tag 通过 `CC_SWITCH_FORK_RELEASE_TAG` 编译进二进制，应用据此比较魔改修订号
@@ -213,8 +221,8 @@
 **Tag 命名规则**：
 
 - `m<upstream-version>-<patch>`
-- 例：基于 upstream v3.18.0 的第 1 个魔改版：`m3.18.0-1`
-- 合并 v3.19 后：`m3.19.0-1`...
+- 例：基于 upstream v3.19.1 的第 1 个魔改版：`m3.19.1-1`
+- 同一上游版本的后续修订依次为：`m3.19.1-2`、`m3.19.1-3`...
 - `m` 前缀明确是 fork 用的魔改版本,**绝不与上游 `v3.x.y` 撞名**
 - 历史 `custom-v3.18.0-*` 标签保留（已下载用户的链接继续有效），但**不再发布新 `custom-*`**
 
@@ -223,8 +231,8 @@
 ```bash
 # 在 main 分支(魔改主分支)上、状态干净时
 git checkout main
-git tag m3.18.0-1
-git push origin m3.18.0-1
+git tag m3.19.1-1
+git push origin m3.19.1-1
 ```
 
 GitHub Actions 自动 build → 8-15 分钟 → 在 [Releases 页](https://github.com/qianbkk/cc-switch/releases) 生成 pre-release → 下载 Portable.zip 解压双击 `CC Switch.exe` 即可。

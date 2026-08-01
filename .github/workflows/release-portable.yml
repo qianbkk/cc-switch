@@ -6,13 +6,13 @@
 #
 # Tag 命名规则:
 #   m<upstream-version>-<patch>
-#   例:m3.18.0-1(基于 upstream v3.18.0 的第 1 个魔改版),
-#      未来合 v3.19 后:m3.19.0-1;m<上游小版本> 与上游 v3.18.0 不会撞名。
+#   例:m3.19.1-1(基于 upstream v3.19.1 的第 1 个魔改版)。
+#   上游版本变化时 revision 从 1 重新开始；同一上游版本的后续魔改依次递增。
 #   历史 custom-v3.18.0-* tag 保留(下载链接继续有效),但不建议再推新 custom-*。
 #
 # 用法:
-#   git tag m3.18.0-1
-#   git push origin m3.18.0-1
+#   git tag m3.19.1-1
+#   git push origin m3.19.1-1
 # 完成后到 https://github.com/qianbkk/cc-switch/releases 下载 zip
 
 name: Release Portable (Windows)
@@ -124,7 +124,7 @@ jobs:
             ## CC Switch 魔改版
 
             这是 [farion1231/cc-switch](https://github.com/farion1231/cc-switch) 的个人魔改分支。
-            基于 v3.18.0 上游合入 + 4 块独占功能（统一网关 / Live 配置保护 / Codex auth 纠正 / 3 个隐藏功能 UI）。
+            基于 v3.19.1 上游合入 + 魔改独占功能（统一网关 / Live 配置保护 / Codex auth 保护 / 魔改功能总开关与隐藏功能 UI / fork 预发行版更新）。
 
             ### 下载
 
@@ -136,7 +136,7 @@ jobs:
 
             - 已剔除上游赞助商推广位（README 段）
             - 已隐藏云同步设置入口（代码保留）
-            - 已合入 v3.18.0 上游全部功能 + 4 个合并冲突修复
+            - 已同步至上游 v3.19.1，并保留全部魔改扩展
 
             ### 配套说明
 

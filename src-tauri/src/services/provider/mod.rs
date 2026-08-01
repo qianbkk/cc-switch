@@ -1070,7 +1070,7 @@ GEMINI_TIMEOUT_MS=30000
 
         // 关代理时这份快照会被原样写回 live。若清不动它却照样清了片段、置了完成标记，
         // 代理一停凭据就复活，而一次性标记保证不会再清第二次。
-        db.save_live_backup("gemini", "}not json{")
+        db.save_live_backup("gemini", "}not json{", None)
             .await
             .expect("seed backup");
 
@@ -3951,7 +3951,7 @@ impl ProviderService {
             if cleaned != original {
                 let text = serde_json::to_string(&cleaned)
                     .map_err(|e| AppError::Message(format!("Serialization failed: {e}")))?;
-                state.db.save_live_backup(app.as_str(), &text).await?;
+                state.db.save_live_backup(app.as_str(), &text, None).await?;
                 log::info!("已从 Gemini 代理接管备份中清除泄漏的共享凭据");
             }
         }
