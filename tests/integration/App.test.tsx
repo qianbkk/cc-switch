@@ -224,7 +224,7 @@ describe("App integration with MSW", { timeout: 15_000 }, () => {
 
     expect(toastErrorMock).not.toHaveBeenCalled();
     expect(toastSuccessMock).toHaveBeenCalled();
-  });
+  }, 10_000);
 
   it("shows toast when auto sync fails in background", async () => {
     const { default: App } = await import("@/App");
