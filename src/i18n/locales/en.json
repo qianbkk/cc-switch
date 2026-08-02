@@ -366,6 +366,30 @@
         "title": "Global Outbound Proxy",
         "description": "Configure proxy for CC Switch to access external APIs"
       },
+      "storageInfo": {
+        "title": "Data Storage Info",
+        "description": "Overview of storage paths, purposes, sizes and record counts",
+        "securityNote": "Metadata only (paths, purposes, sizes, record counts). No API keys, tokens or other sensitive values are ever read or shown.",
+        "baseDir": "Data directory",
+        "totalSize": "Total size",
+        "openFolder": "Open folder",
+        "refresh": "Refresh",
+        "size": "Size",
+        "records": "Records",
+        "notExists": "Missing",
+        "loadFailed": "Failed to load storage info",
+        "openFailed": "Failed to open path",
+        "empty": "No data",
+        "purpose": {
+          "database": "Database",
+          "config": "App config",
+          "settings": "App settings",
+          "backups": "Backups",
+          "logs": "Logs",
+          "skills": "Skills",
+          "other": "Other"
+        }
+      },
       "data": {
         "title": "Data Management",
         "description": "Import and export local configuration data"

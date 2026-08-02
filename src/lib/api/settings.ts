@@ -314,6 +314,17 @@ export const settingsApi = {
   async setLogConfig(config: LogConfig): Promise<boolean> {
     return await invoke("set_log_config", { config });
   },
+
+  // ─── Storage info (metadata only, no sensitive values) ─────
+
+  async getStorageInfo(): Promise<StorageInfo> {
+    return await invoke("get_storage_info");
+  },
+
+  /** 打开应用数据目录下的条目（仅允许 app config dir 以内的路径） */
+  async openStorageItem(path: string): Promise<boolean> {
+    return await invoke("open_storage_item", { path });
+  },
 };
 
 /** 单处工具安装的诊断信息（多处安装冲突检测）。字段对应后端 ToolInstallation。 */
@@ -353,6 +364,32 @@ export interface OptimizerConfig {
 export interface LogConfig {
   enabled: boolean;
   level: "error" | "warn" | "info" | "debug" | "trace";
+}
+
+/** 单个存储条目（后端 StorageItem 的镜像，camelCase） */
+export interface StorageItem {
+  path: string;
+  name: string;
+  kind: "file" | "dir";
+  purpose:
+    | "database"
+    | "config"
+    | "settings"
+    | "backups"
+    | "logs"
+    | "skills"
+    | "other";
+  exists: boolean;
+  sizeBytes: number | null;
+  recordCount: number | null;
+  error: string | null;
+}
+
+/** 数据存储信息总览（后端 StorageInfo 的镜像，camelCase） */
+export interface StorageInfo {
+  baseDir: string;
+  totalSizeBytes: number;
+  items: StorageItem[];
 }
 
 export interface BackupEntry {

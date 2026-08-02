@@ -366,6 +366,30 @@
         "title": "全局出站代理",
         "description": "配置 CC Switch 访问外部 API 时使用的代理"
       },
+      "storageInfo": {
+        "title": "数据存储信息",
+        "description": "查看各类数据的存储路径、用途、大小与记录数量概览",
+        "securityNote": "此处仅展示存储元数据（路径、用途、大小、记录数），不会读取或显示任何 API Key、Token 等敏感内容。",
+        "baseDir": "数据目录",
+        "totalSize": "总占用",
+        "openFolder": "打开目录",
+        "refresh": "刷新",
+        "size": "大小",
+        "records": "记录",
+        "notExists": "不存在",
+        "loadFailed": "获取存储信息失败",
+        "openFailed": "打开路径失败",
+        "empty": "暂无数据",
+        "purpose": {
+          "database": "数据库",
+          "config": "应用配置",
+          "settings": "应用设置",
+          "backups": "备份",
+          "logs": "日志",
+          "skills": "技能",
+          "other": "其他"
+        }
+      },
       "data": {
         "title": "数据管理",
         "description": "导入和导出本地配置数据"

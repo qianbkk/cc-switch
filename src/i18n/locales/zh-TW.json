@@ -366,6 +366,30 @@
         "title": "全域出站代理伺服器",
         "description": "設定 CC Switch 存取外部 API 時使用的代理伺服器"
       },
+      "storageInfo": {
+        "title": "資料儲存資訊",
+        "description": "查看各類資料的儲存路徑、用途、大小與記錄數量概覽",
+        "securityNote": "此處僅展示儲存中繼資料（路徑、用途、大小、記錄數），不會讀取或顯示任何 API Key、Token 等敏感內容。",
+        "baseDir": "資料目錄",
+        "totalSize": "總佔用",
+        "openFolder": "開啟目錄",
+        "refresh": "重新整理",
+        "size": "大小",
+        "records": "記錄",
+        "notExists": "不存在",
+        "loadFailed": "取得儲存資訊失敗",
+        "openFailed": "開啟路徑失敗",
+        "empty": "暫無資料",
+        "purpose": {
+          "database": "資料庫",
+          "config": "應用程式設定檔",
+          "settings": "應用程式設定",
+          "backups": "備份",
+          "logs": "日誌",
+          "skills": "技能",
+          "other": "其他"
+        }
+      },
       "data": {
         "title": "資料管理",
         "description": "匯入和匯出本地設定資料"

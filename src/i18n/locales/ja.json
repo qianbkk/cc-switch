@@ -366,6 +366,30 @@
         "title": "グローバル送信プロキシ",
         "description": "CC Switch が外部 API にアクセスする際のプロキシを設定"
       },
+      "storageInfo": {
+        "title": "データ保存情報",
+        "description": "各種データの保存パス・用途・サイズ・レコード数の概要を表示します",
+        "securityNote": "ここでは保存メタデータ（パス・用途・サイズ・レコード数）のみを表示します。API キーやトークンなどの機密情報は読み取らず表示もしません。",
+        "baseDir": "データディレクトリ",
+        "totalSize": "合計サイズ",
+        "openFolder": "フォルダを開く",
+        "refresh": "更新",
+        "size": "サイズ",
+        "records": "レコード",
+        "notExists": "存在しません",
+        "loadFailed": "保存情報の取得に失敗しました",
+        "openFailed": "パスを開けませんでした",
+        "empty": "データなし",
+        "purpose": {
+          "database": "データベース",
+          "config": "アプリ設定ファイル",
+          "settings": "アプリ設定",
+          "backups": "バックアップ",
+          "logs": "ログ",
+          "skills": "スキル",
+          "other": "その他"
+        }
+      },
       "data": {
         "title": "データ管理",
         "description": "ローカル設定データのインポートとエクスポート"
