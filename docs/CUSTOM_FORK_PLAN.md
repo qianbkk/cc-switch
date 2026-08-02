@@ -67,6 +67,22 @@
 - `705fa20e` feat(gateway): 补齐 Chat↔Anthropic SSE 流式转换
   - 新增 `streaming_anthropic_chat.rs`，覆盖文本、工具调用、usage、错误和非流式 JSON 兜底。
   - 网关三种入站协议与 Anthropic、OpenAI Chat、OpenAI Responses、Gemini 上游之间的流式链路已补齐。
+- `650cae09` fix(build): 绿色版发布改用 `tauri build --no-bundle` 并强制校验资源嵌入（m3.19.1-2）
+  - 根因：release-portable.yml 此前用裸 `cargo build --release`，绕过 Tauri CLI 自动注入的
+    `tauri/custom-protocol` feature，发布二进制以 dev 模式编译：前端资源不嵌入、运行时加载
+    `http://localhost:3000`（开发服务器），新电脑无 dev server 即报"无法访问此页面"。
+    证据链见 `docs/ROOTCAUSE_PORTABLE_DEV_URL.md`（源码 + 工作流 + 二进制内容四层确认）。
+  - 构建命令改为 `pnpm tauri build --no-bundle --target x86_64-pc-windows-msvc`（CLI 注入
+    custom-protocol；--no-bundle 跳过 msi/updater，无需签名证书）。
+  - 新增 `scripts/verify-embedded-assets.mjs`：校验发布 exe 确实嵌入 dist 前端资源，
+    缺失即 CI 失败，禁止上传错误包；ci.yml 新增 `portable-build` 发布烟测 job。
+- `be5c24fd` feat(settings): 新增"数据存储信息"面板（m3.19.1-2）
+  - 后端 `get_storage_info` / `open_storage_item`：扫描应用数据目录（数据库/配置/设置/
+    备份/日志/技能/其他）返回路径、用途、大小、记录数概览；只返回元数据、绝不读取文件
+    内容，不泄露 API Key/Token/OAuth 凭据；兼容路径不存在、无权限、数据库损坏；打开
+    路径限定在应用数据目录内。
+  - 前端 `StorageInfoSection`（设置→高级→数据存储信息）+ 4 语言 i18n。
+  - 测试：`src-tauri/tests/storage_info.rs`（5 例）+ `tests/components/StorageInfoSection.test.tsx`（5 例）。
 - 当前工作树收尾：补充网关路由级鉴权/alias/model 冒烟测试；统一 `tower` 到 Axum 0.7 使用的 0.5 版本；Live 备份增加 `managed_hash`，避免把 CC Switch 自己的写盘误判为用户修改。
 
 ## 5. 设计契约（统一网关）
