@@ -53,6 +53,13 @@ jobs:
       - name: Unit tests
         run: pnpm test:unit
 
+      - name: Build renderer and verify dist integrity
+        # 发布流程依赖 vite 产物（dist/），校验 index.html 引用的资源真实存在，
+        # 避免把残缺的 dist 打成发布包。
+        run: |
+          pnpm build:renderer
+          node scripts/verify-embedded-assets.mjs --check-dist-only
+
   backend:
     name: Backend Checks
     runs-on: ${{ matrix.os }}
@@ -103,3 +110,63 @@ jobs:
 
       - name: Run tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
+
+  portable-build:
+    name: Portable Release Smoke (embedded assets)
+    # 发布烟测：完整跑一遍绿色版发布构建路径（tauri build --no-bundle 注入
+    # custom-protocol），并校验发布 exe 确实嵌入了 dist 前端资源。若资源缺失
+    # （dev 模式产物、会连 localhost:3000），CI 立即失败，禁止发布错误包。
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.12.3
+          run_install: false
+
+      - name: Get pnpm store directory
+        id: pnpm-store
+        shell: bash
+        run: echo "path=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
+
+      - name: Cache pnpm store
+        uses: actions/cache@v5
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-store-
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry and build
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-portable-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-portable-cargo-
+
+      - name: Install frontend deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Tauri app (exe only, no installers)
+        shell: pwsh
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          pnpm tauri build --no-bundle --target x86_64-pc-windows-msvc
+
+      - name: Verify embedded assets (fail on dev-URL build)
+        shell: pwsh
+        run: node scripts/verify-embedded-assets.mjs

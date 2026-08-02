@@ -55,27 +55,35 @@ jobs:
         shell: pwsh
         run: pnpm install --frozen-lockfile
 
-      - name: Build frontend (vite only)
-        shell: pwsh
-        # 必须用 build:renderer(= vite build)，不能用 pnpm build——
-        # package.json 里 build = `tauri build`，会走完整打包流程，
-        # 而 tauri.conf.json 开了 createUpdaterArtifacts + 配了 updater pubkey，
-        # 打包阶段会要求 TAURI_SIGNING_PRIVATE_KEY，fork 没有这个 secret 必然失败。
-        run: pnpm build:renderer
-
       - name: Build Tauri app (exe only, no installers)
         shell: pwsh
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-          TAURI_SIGNING_PRIVATE_KEY: ''
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ''
           # 编译进二进制，供魔改版 updater 判断当前 m* 修订号。
           CC_SWITCH_FORK_RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          # 用 `cargo build --release` 跳过 Tauri CLI 的 bundle 阶段(只产 exe),
-          # 避免 msi 构建需要 Windows 代码签名证书。后续步骤从 exe 自行打 portable.zip。
-          cd src-tauri
-          cargo build --release --target x86_64-pc-windows-msvc
+          # 必须用 `tauri build --no-bundle`，不能用裸 `cargo build --release`：
+          #
+          # Tauri CLI 的 build 命令会自动注入 `tauri/custom-protocol` feature
+          # (crates/tauri-cli/src/interface/rust.rs build_options)，使发布版把
+          # dist 前端资源嵌入二进制，并通过 tauri://localhost 协议加载。
+          # 而裸 `cargo build --release` 不会注入该 feature —— tauri-macros 的
+          # generate_context! 会以 `dev = !custom-protocol` 判定，导致资源完全不
+          # 嵌入、运行时加载 `http://localhost:3000`（开发服务器）。新电脑上无
+          # dev server，双击 exe 即报"无法访问此页面"。
+          #
+          # `--no-bundle` 跳过 msi/安装器与 updater 产物阶段（tauri build.rs
+          # 中 `if !options.no_bundle && ...` 才执行 bundle），因此不需要
+          # Windows 代码签名证书，也不需要 TAURI_SIGNING_PRIVATE_KEY。
+          # 前端由 tauri 的 beforeBuildCommand(= pnpm build:renderer) 自动构建。
+          pnpm tauri build --no-bundle --target x86_64-pc-windows-msvc
+
+      - name: Verify embedded assets (fail on dev-URL build)
+        shell: pwsh
+        # 校验发布 exe 是否真的嵌入了 dist 前端资源（assets/index-*.js 等）。
+        # 若资源缺失 = dev 模式产物（会去连 localhost:3000），直接让 CI 失败，
+        # 禁止上传错误包。脚本见 scripts/verify-embedded-assets.mjs。
+        run: node scripts/verify-embedded-assets.mjs
 
       - name: Package portable zip
         shell: pwsh
