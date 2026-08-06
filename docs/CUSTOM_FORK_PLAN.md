@@ -1,7 +1,7 @@
 # CC Switch 魔改版 — 总体规划与执行状态
 
-> 本文档是本地魔改版（`main` 分支，原 custom 分支）的唯一规划文档，供后续会话/开发接续执行。
-> 最近更新：2026-07-28（同步上游 v3.19.1 与发布后主线修复；保留 Schema v18 和全部魔改功能）
+> 本文档记录魔改版的架构契约、已发布能力与后续维护状态；日常开发必须在独立分支验证后再合入 `main`。
+> 最近更新：2026-08-06（基于已发布 `m3.19.1-2` 复核实际代码、文档边界与首阶段 hardening）
 
 ---
 
@@ -10,12 +10,12 @@
 - 上游追踪分支已同步到 `farion1231/cc-switch` 的 `ebbf141f`，包含 v3.19.0、v3.19.1 及发布后的赞助商清理提交。
 - 合入上游安全修复：Skill zip-slip 与凭据泄漏防护、SQL 导入跨文件限制、深链导入风险提示与禁用 usage script、终端路径转义修复。
 - 合入 Codex / Grok Build / 代理 / 用量统计与模型定价更新，包括 DeepSeek、火山 Agentplan、腾讯混元 TokenHub 原生 Responses 支持。
-- 保留魔改的统一网关、Live 配置保护、Codex auth 保护开关、魔改总开关与隐藏功能 UI、fork `m*` 预发行版更新和 Portable 发布流程。
+- 保留魔改的统一网关、Live 配置保护、Codex auth 保护开关、核心运行时魔改开关与隐藏功能 UI、fork `m*` 预发行版更新和 Portable 发布流程。
 - 数据库结构版本仍为 Schema v18；本次只有数据种子与运行时修复，无新增结构迁移。
 
 ## 1. 项目背景与目标
 
-- 基于上游 [cc-switch](https://github.com/farion1231/cc-switch) 最新源码做本地魔改版。
+- 基于上游 [cc-switch](https://github.com/farion1231/cc-switch) 持续维护 Fork；每个发布版固定记录自己的上游合并基线，不把“曾经最新”写成永久状态。
 - **要求长期跟踪上游更新**，因此所有改动遵循低冲突原则（见 §3）。
 - 用户决策：14 个功能板块**全部保留**，唯一裁剪是云同步（只隐藏 UI 入口，后端保留）。
 
@@ -23,7 +23,7 @@
 
 | 项 | 值 |
 |---|---|
-| 本地路径 | `/d/AI/A_shared_workspace/ccswitch-issue/cc-switch` |
+| 本地路径 | `D:\AIWorkSpace\CCSwitchM` |
 | remote `origin` | github.com/qianbkk/cc-switch（本 fork） |
 | remote `upstream` | github.com/farion1231/cc-switch（原仓库） |
 | 本地 `main` 分支 | **魔改主分支**，GitHub 默认分支，daily 工作区 |
@@ -62,7 +62,8 @@
   - 修改 `src-tauri/src/lib.rs`（注册 3 command + 启动恢复钩子）
 - `b131556d` feat(live-protection): 保护用户手动修改的 live 配置
   - 为 Live 备份增加原始 hash，并新增默认开启的保护开关。
-  - 接入 Claude/Codex/Gemini/Grok Build 的接管、同步和切换写盘入口。
+  - 已接入 Claude/Codex/Gemini/Grok Build 的代理接管、接管期间同步及部分热切换写盘。
+  - 普通非代理模式的供应商切换/保存仍可能直接写 live，尚未统一接入保护；Gemini 在 `.env` 存在时只校验 `.env`，否则才退到 `settings.json`。
   - 前端提供保护开关和用户修改冲突提示。
 - `705fa20e` feat(gateway): 补齐 Chat↔Anthropic SSE 流式转换
   - 新增 `streaming_anthropic_chat.rs`，覆盖文本、工具调用、usage、错误和非流式 JSON 兜底。
@@ -83,7 +84,7 @@
     路径限定在应用数据目录内。
   - 前端 `StorageInfoSection`（设置→高级→数据存储信息）+ 4 语言 i18n。
   - 测试：`src-tauri/tests/storage_info.rs`（5 例）+ `tests/components/StorageInfoSection.test.tsx`（5 例）。
-- 当前工作树收尾：补充网关路由级鉴权/alias/model 冒烟测试；统一 `tower` 到 Axum 0.7 使用的 0.5 版本；Live 备份增加 `managed_hash`，避免把 CC Switch 自己的写盘误判为用户修改。
+- `m3.19.1-2` 发布前收尾：补充网关路由级鉴权/alias/model 冒烟测试；统一 `tower` 到 Axum 0.7 使用的 0.5 版本；Live 备份增加 `managed_hash`，避免把 CC Switch 自己的写盘误判为用户修改。
 
 ## 5. 设计契约（统一网关）
 
@@ -150,7 +151,7 @@
 
 ## 7. 后续待办（按优先级）
 
-### 7.1 Live 配置保护（用户需求 #2）✅ 已完成
+### 7.1 Live 配置保护（用户需求 #2）⚠️ 代理接管路径已完成，普通非代理写盘待补齐
 **症状**：用户在 Claude/Codex/Gemini 的 live 配置文件（如 `~/.codex/config.toml`）做手动修改后，重启 ccswitch 或切换供应商时，修改被接管写盘覆盖。
 
 **根因**（已确认）：
@@ -163,8 +164,9 @@
 **推荐方案（最小侵入）**：
 1. `proxy_live_backup` 表同时保存 `original_hash` 和最近一次应用写入的 `managed_hash`。
 2. `live_protection.rs` 封装校验逻辑，默认开启 `protect_user_live_edits`。
-3. 接入接管、热切换和代理运行期间的同步写盘；只在当前文件 hash 不等于最近一次 CC Switch 写入 hash 时拒绝覆盖。
-4. 前端提供保护开关和用户修改冲突提示；用户关闭保护后可恢复强制接管行为。
+3. 已接入接管、代理运行期间同步和部分热切换写盘；只在当前文件 hash 不等于最近一次 CC Switch 写入 hash 时拒绝覆盖。
+4. 前端已提供保护开关和用户修改冲突提示；用户关闭保护后可恢复接管路径的强制写盘。
+5. 待办：把普通非代理 `ProviderService::switch/update` 最终落到的所有 live 写入统一接入同一校验层，并为 Gemini 双文件策略形成明确契约与测试。
 
 **改动面**：
 - 数据库：`schema.rs` 加列 + `dao/proxy.rs` 加 hash 字段；migration 旧数据可填空
@@ -272,7 +274,7 @@ GitHub Actions 自动 build → 8-15 分钟 → 在 [Releases 页](https://githu
 | `.github/FUNDING.yml` | 已删除 | 魔改版已剔除赞助内容，不该再挂 Sponsor 按钮 |
 | `.github/ISSUE_TEMPLATE/config.yml` | 重写入口 | 安全问题走本仓库；上游问题引导去上游 |
 | `SECURITY.md` | 顶部加 fork 横幅 | 区分「魔改独有代码漏洞」和「上游代码漏洞」的报告去向 |
-| `SUPPORT.md` | 顶部加 fork 横幅 | 引导：怀疑魔改导致的先关总开关自测 |
+| `SUPPORT.md` | 顶部加 fork 横幅 | 引导：怀疑运行时魔改导致的先关核心运行时开关自测 |
 | `CONTRIBUTING.md` | 顶部加 fork 横幅 | 引导：改进产品本身请提给上游，魔改部分才提这里 |
 | `.github/workflows/stale.yml` | 注释掉 cron | 个人 fork 的 issue 很少，不该被机器人每天自动关 |
 | `.github/workflows/claude.yml` | job 级 env 中转 + step 级判空 | fork 没有 `CLAUDE_CODE_OAUTH_TOKEN`，缺了会红；判空后跳过，配上自动生效 |
@@ -297,26 +299,30 @@ jobs:
 冲突时的处理原则是**保留 fork 侧的身份信息**（CODEOWNERS 的 @qianbkk、各横幅），
 正文部分取上游的新版本。
 
-## 9.7. 魔改功能总开关
+## 9.7. 核心运行时魔改开关
 
-**位置**：设置 → 通用 → 魔改功能 → 「启用魔改功能」
+**位置**：设置 → 通用 → 核心运行时魔改 → 「启用核心运行时魔改」
 
-**作用**：一键回退到上游原版行为，用于排查「问题是不是魔改引入的」。
+**作用**：暂停会介入请求或配置写盘的核心 Fork 运行时行为，用于排查问题；它不是“卸载魔改”或“完全变回上游原版”。Portable 发行属性、Fork 更新检查、数据存储信息和魔改详情入口不受该开关控制。
 
 | 层 | 关闭时的行为 |
 |---|---|
-| 统一网关 | `authorize()` 前置守卫直接返回 403 |
-| Live 配置保护 | `get_protect_user_live_edits()` 返回 false，写盘不再校验 hash |
+| 统一网关请求 | `authorize()` 前置守卫直接返回 403 |
+| 网关保存 | 关闭核心开关时拒绝保存 `enabled=true`，但允许保存禁用状态和模型映射 |
+| 网关启动恢复 | 保留 `gateway_config`，但不会仅因网关启用配置而拉起共享代理；普通代理已运行时不会误停 |
+| Live 配置保护 | `get_protect_user_live_edits()` 返回 false，接管写盘不再校验 hash |
 | Codex auth 反向同步 | `maybe_sync_codex_auth()` 提前 return |
-| 魔改 UI | 4 个魔改面板（网关 / Copilot 优化 / 轻量模式 / Claude 插件状态）隐藏 |
+| 运行时魔改 UI | 网关 / Copilot 优化 / 轻量模式 / Claude 插件状态面板隐藏 |
 | 被隐藏的上游入口 | 云同步入口重新出现（`ENABLE_CLOUD_SYNC \|\| !forkEnabled`） |
+| 不受影响 | Portable 版本、Fork 更新检查、数据存储信息、魔改详情入口 |
 
-**数据**：一律保留，重新打开即恢复。这不是卸载，只是"暂时按原版跑"。
+**数据**：一律保留，重新打开即恢复。这不是卸载，只是暂停核心运行时介入。
 
 **实现**：
 - 后端 `AppSettings.fork_features_enabled`（默认 true）+ `settings::fork_features_enabled()` 访问器
-- 各魔改入口统一调这个访问器做守卫
-- 前端 `settings.forkFeaturesEnabled`，`SettingsPage` 用 `forkEnabled` 控制面板显隐
+- 核心运行时入口调用该访问器做守卫；发行属性和只读信息入口不受它控制
+- 前端 `settings.forkFeaturesEnabled`，`SettingsPage` 用 `forkEnabled` 控制相关运行时面板显隐
+- `commands/gateway.rs` 同时守卫启用保存和启动恢复，配置保留但不产生错误启动
 
 ## 10. 上游同步日志
 

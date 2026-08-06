@@ -351,10 +351,10 @@
           farion1231 发布的官方原版。
         </p>
         <p class="small muted">
-          当前上游基线：官方 <code>v3.18.0</code>，已同步到官方最新提交
-          <code>b0482320</code
-          >（2026-07-26）。原版的功能一个没删（除了赞助商推广区）， 在此之上多了
-          4 块自己加的东西。本页面向不写代码的人，术语第一次出现都会当场解释。
+          当前发布快照：<code>m3.19.1-2</code>（2026-08-02），基于上游
+          <code>v3.19.1 / ebbf141f</code>。Fork 主要保留上游能力，在此之上增加统一网关、
+          Live 配置保护、Codex auth 同步、隐藏功能界面、数据存储信息和 Portable 发布维护。
+          本页面按实际代码边界说明，不把“核心运行时开关”描述成完全恢复上游原版。
         </p>
       </header>
 
@@ -362,49 +362,37 @@
 
       <div class="stats">
         <div class="stat">
-          <div class="num">28</div>
-          <div class="cap">魔改版独有的提交<br />（原版没有的改动记录）</div>
+          <div class="num">41</div>
+          <div class="cap">Fork 独有提交<br />（其中 38 个非合并提交）</div>
         </div>
         <div class="stat">
-          <div class="num">62</div>
-          <div class="cap">被碰过的文件<br />（新增 20 + 修改 42）</div>
+          <div class="num">87</div>
+          <div class="cap">相对发布基线<br />有差异的文件</div>
         </div>
         <div class="stat">
-          <div class="num good">+6859</div>
+          <div class="num good">+8934</div>
           <div class="cap">新增代码行</div>
         </div>
         <div class="stat">
-          <div class="num warn">−626</div>
-          <div class="cap">删除代码行<br />（几乎全是 README 赞助区）</div>
+          <div class="num warn">−840</div>
+          <div class="cap">删除代码行<br />（含文档与上游同步调整）</div>
         </div>
       </div>
 
       <div class="card">
         <p>
-          <b>这些数字怎么读：</b>「删除 626 行」听起来很多，但其中
-          <b>459 行来自 README.md 一个文件</b>——那是原版首页里 28
-          段赞助商广告文案。也就是说，
-          <b>魔改版几乎没有删掉任何原版功能代码</b
-          >，绝大部分工作是<b>往上加</b>。
-        </p>
-        <p>加的部分大致对半开：</p>
-        <ul>
-          <li>
-            <b>后端（Rust，程序的"发动机"）</b>：22 个文件，
-            <span class="good">+2663</span> 行 −40 行
-          </li>
-          <li>
-            <b>前端（界面，你点的按钮）</b>：24 个文件，
-            <span class="good">+2006</span> 行 −95 行
-          </li>
-          <li>其余是文档、打包脚本、同步上游用的工具脚本</li>
-        </ul>
-        <p class="muted small">
-          没有任何文件被整个删除（<code>git</code> 统计里删除文件数为 0）。
+          <b>这些数字怎么读：</b>87 个文件与代码行统计包含新增功能、上游同步后的
+          适配、测试、文档和发布脚本，不等于“改坏了 87 个上游模块”。Fork 仍以新增
+          独立模块为主，但确实修改了代理、数据库、设置页和应用初始化等共享枢纽，
+          因此同步新上游时必须跑完整回归，不能再笼统宣称“原版代码一行没动”。
         </p>
         <p class="muted small">
-          <b>统计口径：</b>以上数字是本页所属版本发布时的快照，对比基准为上游
-          <code>b0482320</code>。后续提交会让数字继续变化，下次发版时本页会一并更新。
+          这组数字描述的是发布快照，不作为功能是否正确的证明；功能边界以本页说明、
+          自动化测试和实际代码调用链为准。
+        </p>
+        <p class="muted small">
+          <b>统计口径：</b>以上数字固定对应发布标签 <code>m3.19.1-2</code>，
+          对比其上游合并基线 <code>ebbf141f</code>。上游后续提交不会倒改这组发布快照数字。
         </p>
       </div>
 
@@ -421,7 +409,7 @@
         >
       </div>
 
-      <h2>2. 魔改版独有的 4 大功能</h2>
+      <h2>2. Fork 的核心功能与维护增强</h2>
 
       <!-- ============ 功能 1 ============ -->
       <div class="card accent">
@@ -463,7 +451,7 @@
           <summary>展开技术细节</summary>
           <div class="small">
             <p>
-              核心代码在 <code>src-tauri/src/proxy/gateway.rs</code>（813 行）。
+              核心路由与协议编排位于 <code>src-tauri/src/proxy/gateway.rs</code>。
             </p>
             <p><b>四个入口：</b></p>
             <table>
@@ -520,8 +508,8 @@
               <code>get_gateway_config</code> /
               <code>save_gateway_config</code> /
               <code>regenerate_gateway_key</code>（见
-              <code>src-tauri/src/commands/gateway.rs</code>，197 行）。
-              开着网关时关掉应用再打开，会自动把代理服务重新拉起来。
+              <code>src-tauri/src/commands/gateway.rs</code>）。只有核心运行时魔改和网关配置
+              都开启时，应用重启才会因网关需要拉起共享代理。
             </p>
             <p>
               <b>不影响原版行为：</b>路由挂在 <code>/gateway/</code> 前缀下，
@@ -571,8 +559,7 @@
           <summary>展开技术细节</summary>
           <div class="small">
             <p>
-              核心代码在 <code>src-tauri/src/live_protection.rs</code>（196
-              行）。
+              核心 Hash 校验逻辑位于 <code>src-tauri/src/live_protection.rs</code>。
             </p>
             <p>
               <b>两个指纹：</b>数据库的
@@ -606,11 +593,11 @@
               <code>LiveConfigModifiedByUser</code> 错误并中止写盘。
             </p>
             <p>
-              <b>覆盖范围：</b>Claude（<code>settings.json</code>）、
-              Codex（<code>config.toml</code>）、Gemini（<code>.env</code>，
-              没有就退回 <code>settings.json</code>）、Grok
-              Build（<code>config</code>）。
-              接管、切换供应商、代理运行期间的同步写盘，三个入口都接了这套校验。
+              <b>覆盖范围：</b>目前主要覆盖代理接管、接管期间同步和部分热切换写盘。
+              普通非代理模式的供应商切换/保存仍可能直接重写 live 文件，尚未全面接入。
+              Claude 校验 <code>settings.json</code>，Codex 校验 <code>config.toml</code>，
+              Grok Build 校验 <code>config</code>；Gemini 在 <code>.env</code> 存在时只校验
+              <code>.env</code>，否则才退到 <code>settings.json</code>，不是同时保护两个文件。
             </p>
             <p>
               <b>开关：</b><code>protect_user_live_edits</code>，默认
@@ -659,7 +646,7 @@
           <div class="small">
             <p>
               核心代码在
-              <code>src-tauri/src/services/codex_auth_sync.rs</code>（328 行）。
+              <code>src-tauri/src/services/codex_auth_sync.rs</code>。
             </p>
             <p>
               <b>最关键的克制：只改一个字段。</b><code>auth.json</code> 里还住着
@@ -786,23 +773,22 @@
       </div>
 
       <div class="card accent">
-        <h3>🛟 后悔药：魔改功能总开关</h3>
+        <h3>核心运行时魔改开关</h3>
         <p>
-          担心魔改版出问题？<b>设置 → 通用 → 魔改功能</b>
-          里有一个总开关，关掉它，上面这 4
-          大功能会<b>全部停用</b>，应用立刻回到跟官方原版一样的行为：
+          <b>设置 → 通用 → 核心运行时魔改</b>中的开关，用于暂停会介入请求或
+          配置写盘的 Fork 行为，方便排查问题；它不是“卸载魔改”，也不保证所有行为
+          完全等同于当前最新上游。
         </p>
         <ul>
-          <li>统一网关拒绝所有请求（端口不再对外服务）</li>
-          <li>Live 配置保护不再拦截，写盘行为跟原版一致</li>
-          <li>Codex auth 反向同步不执行</li>
-          <li>魔改新增的设置面板全部隐藏</li>
-          <li>被魔改藏起来的原版入口（云同步）重新出现</li>
+          <li><code>/gateway/*</code> 请求返回 403</li>
+          <li>关闭状态下不能启用网关，启动时也不会仅因网关配置拉起共享代理</li>
+          <li>普通代理如果本来已运行，不会被误停，其原有路由仍可服务</li>
+          <li>Live 配置保护不再拦截接管写盘，Codex auth 反向同步不执行</li>
+          <li>相关运行时面板隐藏，云同步入口重新出现</li>
+          <li>Portable 标识、Fork 更新检查、数据存储信息和魔改详情仍保留</li>
         </ul>
         <p class="good">
-          <b>配置数据一律保留</b
-          >——网关的模型别名表、Live 保护记录都还在数据库里躺着，把开关重新打开，
-          一切照旧。这不是卸载，只是"暂时按原版跑"。
+          <b>配置数据一律保留</b>——网关模型映射和保护记录都不会被清空，重新开启后可继续使用。
         </p>
       </div>
 
@@ -829,8 +815,8 @@
             主题、深链、自动备份、原子写、多语言
           </td>
           <td>
-            行为与官方 <b>完全一致</b>，一行没动。
-            官方文档怎么写，这里就怎么用。
+            主体能力来自上游；Fork 修改了少量共享枢纽，当前行为须以本版本测试与说明为准，
+            不能笼统视为与最新上游逐行一致。
           </td>
         </tr>
         <tr>
@@ -871,13 +857,9 @@
       </table>
 
       <div class="note">
-        <b>为什么这么克制？</b>因为要长期跟着官方走。每删一处官方代码，
-        下次官方更新时就多一处合并冲突。26 个改动提交里，
-        真正碰到官方"枢纽文件"的只有寥寥几个
-        （<code>lib.rs</code>、<code>commands/mod.rs</code>、
-        <code>SettingsPage.tsx</code>、<code>proxy/server.rs</code>），
-        其余全是新建文件。上一次合并官方 v3.18.0 时，
-        <b>总共只出现了 4 处冲突</b>，全部当天解决。
+        <b>为什么仍要克制？</b>因为要长期跟着官方走。Fork 尽量把新能力放进独立文件，
+        但代理、数据库、设置页和启动流程等共享枢纽已经有真实改动。历史同步的少量文本冲突
+        不能代表今后都低风险；每次同步都应在独立分支预演并跑前端、Rust、迁移和代理回归。
       </div>
 
       <h2>4. 同步历史时间线</h2>
@@ -941,15 +923,14 @@
         </div>
 
         <div class="tl-item now">
-          <div class="tl-date">当前</div>
-          <div class="tl-title">领先官方 26 个提交</div>
+          <div class="tl-date">2026-08-02 · m3.19.1-2</div>
+          <div class="tl-title">发布构建修复 + 数据存储信息</div>
           <div class="tl-body">
-            版本号刻意<b>跟官方保持一致</b>（都是 <code>3.18.0</code>），
-            魔改版的迭代次数体现在发布标签的后缀上（如
-            <code>m3.18.0-1</code>、<code>m3.18.0-2</code>）。
-            这样合并官方更新时永远不用回填版本号。<br />
-            <b>验证状态：</b>后端测试 2202 项通过、0 失败；
-            后端编译检查干净；前端类型检查干净。
+            Portable 工作流改用 <code>tauri build --no-bundle</code>，并新增前端资源嵌入
+            校验，避免绿色版误加载开发服务器；设置页新增只读的数据存储信息面板。
+            同期还加入 Fork 预发行版更新检查、网关启动失败状态回滚和测试稳定性修正。<br />
+            <b>发布快照：</b>41 个 Fork 独有提交（38 个非合并提交），87 个差异文件，
+            <code>+8934/-840</code>。当前上游会继续前进，维护时应以 Git 现场数据为准。
           </div>
         </div>
       </div>
@@ -1137,7 +1118,7 @@ export OPENAI_API_KEY="ccs-你面板上的那串48位字符"</code></pre>
         <p class="muted">
           数据来源：本仓库 <code>git</code> 提交记录 ·
           <code>docs/CUSTOM_FORK_PLAN.md</code> · 上游基线
-          <code>b0482320</code>（2026-07-26）
+          <code>m3.19.1-2 / ebbf141f</code>（发布于 2026-08-02）
         </p>
       </footer>
     </div>

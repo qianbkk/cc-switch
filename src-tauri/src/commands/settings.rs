@@ -10,6 +10,13 @@ struct UpdateDownloadProgress {
     total: Option<u64>,
 }
 
+fn should_restore_gateway_after_runtime_features_change(
+    was_enabled: bool,
+    is_enabled: bool,
+) -> bool {
+    !was_enabled && is_enabled
+}
+
 fn merge_settings_for_save(
     mut incoming: crate::settings::AppSettings,
     existing: &crate::settings::AppSettings,
@@ -68,6 +75,10 @@ pub async fn save_settings(
     let unify_codex_changed =
         merged.unify_codex_session_history != existing.unify_codex_session_history;
     let unify_codex_enabled = merged.unify_codex_session_history;
+    let restore_gateway = should_restore_gateway_after_runtime_features_change(
+        existing.fork_features_enabled,
+        merged.fork_features_enabled,
+    );
     crate::settings::update_settings(merged).map_err(|e| e.to_string())?;
 
     // 统一会话开关变更时立即重写当前官方 Codex 供应商的 live 配置，
@@ -123,6 +134,14 @@ pub async fn save_settings(
             }
         }
     }
+
+    // 所有可能回滚设置的副作用完成后，再恢复已保留的网关启用状态。
+    // 恢复函数会自行检查网关配置和共享代理状态；失败只记录日志，不能因为
+    // 端口占用等网关局部问题阻止 Live 保护和 Codex auth 同步重新启用。
+    if restore_gateway {
+        crate::commands::gateway::ensure_gateway_started_on_startup(state.inner()).await;
+    }
+
     Ok(true)
 }
 
@@ -314,12 +333,28 @@ pub async fn set_auto_launch(enabled: bool) -> Result<bool, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::merge_settings_for_save;
+    use super::{merge_settings_for_save, should_restore_gateway_after_runtime_features_change};
     use crate::settings::{
         AppSettings, CodexOfficialHistoryUnifyMigration, CodexProviderTemplateMigration,
         CodexThirdPartyHistoryProviderBucketMigration, LocalMigrations, S3SyncSettings,
         WebDavSyncSettings,
     };
+
+    #[test]
+    fn gateway_restore_only_runs_when_core_runtime_features_are_reenabled() {
+        assert!(should_restore_gateway_after_runtime_features_change(
+            false, true
+        ));
+        assert!(!should_restore_gateway_after_runtime_features_change(
+            true, true
+        ));
+        assert!(!should_restore_gateway_after_runtime_features_change(
+            true, false
+        ));
+        assert!(!should_restore_gateway_after_runtime_features_change(
+            false, false
+        ));
+    }
 
     #[test]
     fn save_settings_should_preserve_existing_webdav_when_payload_omits_it() {

@@ -17,11 +17,13 @@
 这是 cc-switch 上游的个人魔改分支，主要用于**本人**日常使用；`m*` tag 会发布 Windows Portable 预发行包。主要改动：
 
 - **统一网关**(`/gateway/*`)：把多个供应商聚合成一个 OpenAI 兼容端点,任意客户端配一次 key+地址就能跨模型调度
-- **Live 配置保护**：用户手改 `~/.codex/config.toml` 等 live 文件后，接管/切换不再覆盖,带冲突提示 toast 与一键开关
+- **Live 配置保护**：代理接管及接管期间写盘前检测用户对 `~/.codex/config.toml` 等 live 文件的手动修改，冲突时拒绝覆盖并提示；普通非代理切换/保存尚未全面接入
 - **Codex auth.json 反向同步**：修掉 Codex CLI 0.14+ 把陈年 `OPENAI_API_KEY` 写回 `auth.json` 导致 UI 显示旧值的 Bug #3646
 - **3 个隐藏功能补 UI**：Copilot 优化器、轻量模式、Claude 插件状态(后端命令本来就在,只是没入口)
+- **数据存储信息**：只读展示应用数据库、设置、备份、日志和 Skills 的路径、大小与记录数，并限制只能打开应用数据目录内的项目
 - **代理面板常驻可见**：接管开关不再藏进 `AnimatePresence`,文案从"应用接管"改为"使用 CC Switch 代理"
 - **隐藏云同步入口**：`ENABLE_CLOUD_SYNC=false`,WebDAV/S3 后端代码保留未删
+- **核心运行时魔改开关**：关闭统一网关、Live 保护和 Codex auth 同步等运行时介入；Portable 标识、Fork 更新和说明入口仍保留
 
 详细规划见 [docs/CUSTOM_FORK_PLAN.md](docs/CUSTOM_FORK_PLAN.md)。
 
@@ -53,15 +55,16 @@ CC Switch 用一个桌面应用统一管理:50+ 内置供应商预设、一键�
 - 鉴权:`Authorization: Bearer <key>` 或 `x-api-key: <key>`,启动时自动生成 `ccs-` 前缀 48 位 hex
 - 模型通过 `body.model` 精确匹配 alias 表,未命中返回可用列表
 - 协议转换走「上游协议 → Anthropic 中间表示 → 入站协议」的链式两步,复用上游已有的 3 个转换器,只补缺失的 Anthropic→Chat 一环就凑齐 3 入站 × 4 上游全部 12 种组合
-- 启动时根据 `gateway_config.enabled` 自动恢复,与现存的代理服务独立并存
+- 启动时仅在“核心运行时魔改”开启且 `gateway_config.enabled=true` 时自动恢复；网关与原有代理共享同一代理进程和监听端口，路由可并存
 
 ### Live 配置保护
 
-修用户手改 `~/.codex/config.toml`、`~/.claude/settings.json` 等 live 文件后,被接管或切换供应商覆盖的问题。
+保护代理接管及接管期间由 CC Switch 管理的 live 写盘，避免用户手改 `~/.codex/config.toml`、`~/.claude/settings.json` 等文件后被静默覆盖。普通非代理模式的供应商切换/保存尚未全面接入该保护。
 
 - 备份表 `proxy_live_backup` 同时存 `original_hash`(接管前)和 `managed_hash`(CC Switch 最近一次写盘后)
-- 写盘前比对磁盘当前 SHA256 与 `managed_hash`,不一致就拒绝写盘并返回 `LiveConfigModifiedByUser`
-- 开关 `protect_user_live_edits` 默认开,关掉恢复强制接管
+- 代理接管写盘前比对磁盘当前 SHA256 与 `managed_hash`,不一致就拒绝写盘并返回 `LiveConfigModifiedByUser`
+- Gemini 校验 `.env`；仅当 `.env` 不存在时退到 `settings.json`，并非同时保护两个文件
+- 开关 `protect_user_live_edits` 默认开,关掉恢复接管路径的强制写盘
 - 前端用 error 前缀匹配(`用户已修改`、`User has modified` 等)触发专用 toast,引导用户关闭保护
 
 ### Codex auth.json 反向同步
@@ -74,9 +77,13 @@ Codex CLI 0.14+ 启动时把陈年 `OPENAI_API_KEY` 写回 `~/.codex/auth.json`,
 
 后端命令本来在上游就有(`enter_lightweight_mode`、`get_copilot_optimizer_config`、`get_claude_plugin_status`),魔改版只加前端面板和 API 包装,零后端改动。
 
+### 核心运行时魔改开关
+
+设置中的开关控制统一网关、Live 配置保护、Codex auth 反向同步及相关运行时面板。关闭时会保留全部配置，`/gateway/*` 返回 403，并阻止网关配置单独在启动时拉起共享代理；如果普通代理已经在运行，不会被误停。Portable 发行属性、Fork 更新检查、数据存储信息和魔改详情入口不属于该开关范围。
+
 ## 上游未改动的功能
 
-下面这些直接复用上游,行为与 [上游 README](https://github.com/farion1231/cc-switch) 完全一致:
+下面这些主体能力直接来自上游；Fork 为统一网关、Live 保护、设置入口和发布逻辑改动了少量共享模块，因此不能笼统保证每条内部路径都与当前最新上游完全一致：
 
 - 供应商管理 / 切换 / 托盘 / 导入导出
 - 本地代理格式转换、failover、熔断、健康监控、per-app 接管
