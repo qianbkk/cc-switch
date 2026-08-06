@@ -312,11 +312,10 @@ async fn forward_with_single_provider(
 /// 把 `ProxyResponse` 转成 axum `Response`：按上游/入站协议做 JSON 或 SSE 反向转换。
 ///
 /// 设计：non-streaming 完整实现（链式转 Anthropic 中间表示，再转出）；
-/// streaming 走"上游 SSE 协议 → Anthropic SSE → 入站 SSE"两步链式。已实现的转换路径：
-/// - OpenAI Responses → Anthropic SSE → OpenAI Responses（流透传，因为双向同协议）
-/// - OpenAI Responses → Anthropic SSE → OpenAI Responses 客户端（流正常）
-/// - Gemini → Anthropic SSE → 入站（流正常）
-/// - 缺口：Chat→Anthropic SSE、Anthropic→Chat SSE（暂 passthrough + warn）。
+/// streaming 走"上游 SSE 协议 → Anthropic SSE → 入站 SSE"两步链式。
+/// OpenAI Chat、OpenAI Responses 与 Gemini 上游均先转换为 Anthropic SSE，
+/// 再按入站协议输出 Anthropic、OpenAI Chat 或 OpenAI Responses SSE。
+/// 协议分支已接通；完整互操作性仍由转换器单测和后续网关 E2E 矩阵持续验证。
 async fn proxy_response_to_axum(
     resp: ProxyResponse,
     inbound: InboundProtocol,

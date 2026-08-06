@@ -965,8 +965,8 @@ pub fn unify_codex_session_history() -> bool {
         .unify_codex_session_history
 }
 
-/// 魔改功能总开关（fork 专属）。返回 false 时，所有 fork 独有行为都应当
-/// 让路给上游原版行为——用作各魔改入口的统一守卫。
+/// 核心运行时魔改开关（fork 专属）。返回 false 时，统一网关、Live 配置保护
+/// 与 Codex auth 反向同步停止介入；发行版更新、Portable 标识和说明入口不受影响。
 pub fn fork_features_enabled() -> bool {
     settings_store()
         .read()

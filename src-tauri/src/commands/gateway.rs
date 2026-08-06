@@ -118,11 +118,25 @@ pub async fn get_gateway_config(state: State<'_, AppState>) -> Result<GatewayCon
     load_or_init(&state.db)
 }
 
+fn ensure_gateway_enable_allowed(
+    fork_features_enabled: bool,
+    gateway_enabled: bool,
+) -> Result<(), String> {
+    if gateway_enabled && !fork_features_enabled {
+        return Err("核心运行时魔改已关闭，无法启用统一网关".to_string());
+    }
+    Ok(())
+}
+
+fn gateway_start_allowed(fork_features_enabled: bool, gateway_enabled: bool) -> bool {
+    fork_features_enabled && gateway_enabled
+}
+
 /// 保存网关配置。
 ///
+/// - 核心运行时魔改关闭时，允许保存禁用状态和模型映射，但拒绝启用网关
 /// - 保存到 settings KV
-/// - 若 `enabled=true` 且代理当前未运行，则启动代理（不带 Live 接管，
-///   仅暴露 `/gateway/*` 端点）
+/// - 若 `enabled=true` 且代理当前未运行，则启动共享代理（不带 Live 接管）
 /// - 启动失败时保留 key / 模型映射，但把持久化的 `enabled` 回滚为 false，
 ///   避免 UI 与实际运行状态分裂
 #[tauri::command]
@@ -130,11 +144,16 @@ pub async fn save_gateway_config(
     config: GatewayConfig,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    let fork_features_enabled = crate::settings::fork_features_enabled();
+    ensure_gateway_enable_allowed(fork_features_enabled, config.enabled)?;
+
     // 1. 持久化
     persist(&state.db, &config)?;
 
-    // 2. 若启用且代理未运行，则启动代理服务器
-    if config.enabled && !state.proxy_service.is_running().await {
+    // 2. 若启用且代理未运行，则启动共享代理服务器
+    if gateway_start_allowed(fork_features_enabled, config.enabled)
+        && !state.proxy_service.is_running().await
+    {
         match state.proxy_service.start().await {
             Ok(info) => {
                 log::info!(
@@ -168,10 +187,17 @@ pub async fn regenerate_gateway_key(state: State<'_, AppState>) -> Result<String
     Ok(new_key)
 }
 
-/// 应用启动恢复时调用：若网关 enabled 则确保代理已启动。
+/// 应用启动恢复时调用：核心运行时魔改开启且网关 enabled 时确保代理已启动。
 ///
-/// 由 `lib.rs` 在现有代理恢复代码附近调用，幂等多次调用安全。
+/// 由 `lib.rs` 在现有代理恢复代码附近调用，幂等多次调用安全。关闭核心开关时
+/// 保留网关配置，但不会仅因为网关配置而拉起共享代理。
 pub async fn ensure_gateway_started_on_startup(state: &AppState) {
+    let fork_features_enabled = crate::settings::fork_features_enabled();
+    if !fork_features_enabled {
+        log::debug!("[Gateway] 启动恢复：核心运行时魔改已关闭，保留配置但跳过启动");
+        return;
+    }
+
     let cfg = match load_or_init(&state.db) {
         Ok(c) => c,
         Err(e) => {
@@ -215,6 +241,25 @@ pub fn load_gateway_config(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn enabling_gateway_requires_core_runtime_features() {
+        assert!(ensure_gateway_enable_allowed(true, true).is_ok());
+        assert!(ensure_gateway_enable_allowed(true, false).is_ok());
+        assert!(ensure_gateway_enable_allowed(false, false).is_ok());
+        assert_eq!(
+            ensure_gateway_enable_allowed(false, true).unwrap_err(),
+            "核心运行时魔改已关闭，无法启用统一网关"
+        );
+    }
+
+    #[test]
+    fn gateway_start_requires_both_runtime_features_and_gateway_enabled() {
+        assert!(gateway_start_allowed(true, true));
+        assert!(!gateway_start_allowed(false, true));
+        assert!(!gateway_start_allowed(true, false));
+        assert!(!gateway_start_allowed(false, false));
+    }
 
     #[test]
     fn start_failure_disables_gateway_but_preserves_user_config() {
