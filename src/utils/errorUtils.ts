@@ -37,6 +37,17 @@ export const extractErrorMessage = (error: unknown): string => {
   return "";
 };
 
+export const isLiveConfigModifiedError = (error: unknown): boolean => {
+  const detail = extractErrorMessage(error);
+  if (!detail) return false;
+  const lower = detail.toLowerCase();
+  return (
+    detail.startsWith("用户已修改") ||
+    detail.startsWith("User has modified") ||
+    lower.includes("refusing to overwrite")
+  );
+};
+
 /**
  * 将已知的 MCP 相关后端错误（通常为中文硬编码）映射为 i18n 文案
  * 采用包含式匹配，尽量稳健地覆盖不同上下文的相似消息。

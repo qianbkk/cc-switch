@@ -699,6 +699,7 @@ pub(crate) fn write_live_with_common_config(
     db: &Database,
     app_type: &AppType,
     provider: &Provider,
+    reason: crate::live_protection::LiveWriteReason,
 ) -> Result<(), AppError> {
     let mut effective_provider = provider.clone();
     effective_provider.settings_config =
@@ -714,7 +715,9 @@ pub(crate) fn write_live_with_common_config(
         return Ok(());
     }
 
-    write_live_snapshot(app_type, &effective_provider)
+    crate::live_protection::protected_live_write(db, app_type.as_str(), reason, || {
+        write_live_snapshot(app_type, &effective_provider)
+    })
 }
 
 pub(crate) fn strip_common_config_from_live_settings(
@@ -1184,7 +1187,12 @@ fn sync_all_providers_to_live(state: &AppState, app_type: &AppType) -> Result<()
             continue;
         }
 
-        if let Err(e) = write_live_with_common_config(state.db.as_ref(), app_type, provider) {
+        if let Err(e) = write_live_with_common_config(
+            state.db.as_ref(),
+            app_type,
+            provider,
+            crate::live_protection::LiveWriteReason::ProviderSync,
+        ) {
             log::warn!(
                 "Failed to sync {:?} provider '{}' to live: {e}",
                 app_type,
@@ -1214,7 +1222,12 @@ pub(crate) fn sync_current_provider_for_app_to_live(
 
         let providers = state.db.get_all_providers(app_type.as_str())?;
         if let Some(provider) = providers.get(&current_id) {
-            write_live_with_common_config(state.db.as_ref(), app_type, provider)?;
+            write_live_with_common_config(
+                state.db.as_ref(),
+                app_type,
+                provider,
+                crate::live_protection::LiveWriteReason::ProviderSync,
+            )?;
         }
     }
 
@@ -1253,7 +1266,12 @@ fn sync_current_provider_for_app_respecting_takeover(
     // that normal provider sync must not rewrite the managed live file.
     if has_live_backup || live_taken_over {
         if matches!(app_type, AppType::ClaudeDesktop) {
-            write_live_with_common_config(state.db.as_ref(), app_type, provider)?;
+            write_live_with_common_config(
+                state.db.as_ref(),
+                app_type,
+                provider,
+                crate::live_protection::LiveWriteReason::ProviderSync,
+            )?;
         } else {
             futures::executor::block_on(
                 state
@@ -1265,7 +1283,12 @@ fn sync_current_provider_for_app_respecting_takeover(
         return Ok(());
     }
 
-    write_live_with_common_config(state.db.as_ref(), app_type, provider)
+    write_live_with_common_config(
+        state.db.as_ref(),
+        app_type,
+        provider,
+        crate::live_protection::LiveWriteReason::ProviderSync,
+    )
 }
 
 /// Sync current provider to live configuration

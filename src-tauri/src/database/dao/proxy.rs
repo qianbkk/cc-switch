@@ -822,6 +822,42 @@ impl Database {
         Ok(())
     }
 
+    /// 读取普通切换/保存路径最近一次成功写盘后的组合指纹。
+    ///
+    /// 该状态与代理接管备份分离，避免普通写盘制造“正在接管”的假信号。
+    pub fn get_live_managed_state_hash(&self, app_type: &str) -> Result<Option<String>, AppError> {
+        let conn = lock_conn!(self.conn);
+        match conn.query_row(
+            "SELECT managed_hash FROM live_managed_state WHERE app_type = ?1",
+            rusqlite::params![app_type],
+            |row| row.get(0),
+        ) {
+            Ok(hash) => Ok(Some(hash)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(AppError::Database(e.to_string())),
+        }
+    }
+
+    /// 记录普通切换/保存路径最近一次成功写盘后的组合指纹。
+    pub fn set_live_managed_state_hash(
+        &self,
+        app_type: &str,
+        managed_hash: &str,
+    ) -> Result<(), AppError> {
+        let conn = lock_conn!(self.conn);
+        let now = chrono::Utc::now().to_rfc3339();
+        conn.execute(
+            "INSERT INTO live_managed_state (app_type, managed_hash, updated_at)
+             VALUES (?1, ?2, ?3)
+             ON CONFLICT(app_type) DO UPDATE SET
+                 managed_hash = excluded.managed_hash,
+                 updated_at = excluded.updated_at",
+            rusqlite::params![app_type, managed_hash, now],
+        )
+        .map_err(|e| AppError::Database(e.to_string()))?;
+        Ok(())
+    }
+
     /// 检查是否存在任意 Live 配置备份
     pub async fn has_any_live_backup(&self) -> Result<bool, AppError> {
         let conn = lock_conn!(self.conn);

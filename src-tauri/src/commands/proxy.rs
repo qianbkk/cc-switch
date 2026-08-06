@@ -293,6 +293,17 @@ pub async fn set_protect_user_live_edits(
         .map_err(|e| e.to_string())
 }
 
+/// 接受当前磁盘 Live 配置为新的冲突基线，用于用户确认后的一次性覆盖重试。
+#[tauri::command]
+pub async fn accept_current_live_config(
+    state: tauri::State<'_, AppState>,
+    app_type: String,
+) -> Result<(), String> {
+    crate::live_protection::accept_current_live_state(state.db.as_ref(), &app_type)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 /// 检查是否处于 Live 接管模式
 #[tauri::command]
 pub async fn is_live_takeover_active(state: tauri::State<'_, AppState>) -> Result<bool, String> {

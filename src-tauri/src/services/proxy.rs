@@ -633,8 +633,27 @@ impl ProxyService {
         Ok(true)
     }
 
+    async fn check_live_takeover_conflicts(&self) -> Result<(), String> {
+        for app_type in [
+            AppType::Claude,
+            AppType::Codex,
+            AppType::Gemini,
+            AppType::GrokBuild,
+        ] {
+            crate::live_protection::check_user_modified(&self.db, app_type.as_str())
+                .await
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }
+
     /// 启动代理服务器（带 Live 配置接管）
     pub async fn start_with_takeover(&self) -> Result<ProxyServerInfo, String> {
+        // 在创建本次接管备份之前先按现有托管基线校验全部应用。
+        // 如果先备份，用户在普通切换后做的外部修改会被当成本次“原始配置”，
+        // 从而绕过冲突保护。前置校验也能避免写到一半才发现后续应用冲突。
+        self.check_live_takeover_conflicts().await?;
+
         // 1. 备份各应用的 Live 配置
         self.backup_live_configs().await?;
 
@@ -1931,6 +1950,8 @@ impl ProxyService {
                 );
             } else {
                 self.write_live_config_for_app(app_type, &config)?;
+                crate::live_protection::record_normal_managed_state(self.db.as_ref(), app_type_str)
+                    .map_err(|e| format!("记录 {app_type_str} Live 托管指纹失败: {e}"))?;
                 log::info!("{app_type_str} Live 配置已从备份恢复");
                 return Ok(());
             }
@@ -1961,6 +1982,8 @@ impl ProxyService {
 
         // 2.2) 最后兜底：尽力清理占位符与本地代理地址，避免长期卡在代理占位符状态
         self.cleanup_takeover_placeholders_in_live_for_app(app_type)?;
+        crate::live_protection::record_normal_managed_state(self.db.as_ref(), app_type_str)
+            .map_err(|e| format!("记录 {app_type_str} Live 托管指纹失败: {e}"))?;
         log::info!("{app_type_str} Live 接管占位符已清理（无备份兜底）");
         Ok(())
     }
@@ -2029,8 +2052,13 @@ impl ProxyService {
             return Ok(false);
         }
 
-        write_live_with_common_config(self.db.as_ref(), app_type, provider)
-            .map_err(|e| format!("写入 {app_type:?} Live 配置失败: {e}"))?;
+        write_live_with_common_config(
+            self.db.as_ref(),
+            app_type,
+            provider,
+            crate::live_protection::LiveWriteReason::ProxyRestore,
+        )
+        .map_err(|e| format!("写入 {app_type:?} Live 配置失败: {e}"))?;
 
         Ok(true)
     }
@@ -3822,6 +3850,45 @@ mod tests {
                 .and_then(|env| env.get("ANTHROPIC_API_KEY"))
                 .is_none(),
             "non-managed providers should retain the legacy fallback behavior"
+        );
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn takeover_conflict_check_rejects_external_edit_before_backup() {
+        let _home = TempHome::new();
+        crate::settings::reload_settings().expect("reload settings");
+
+        let db = Arc::new(Database::memory().expect("init db"));
+        let service = ProxyService::new(db.clone());
+        let live_path = crate::config::get_claude_settings_path();
+        std::fs::create_dir_all(live_path.parent().expect("parent"))
+            .expect("create config directory");
+
+        crate::live_protection::protected_live_write(
+            db.as_ref(),
+            "claude",
+            crate::live_protection::LiveWriteReason::ProviderSwitch,
+            || {
+                crate::config::write_json_file(&live_path, &json!({ "managed": true }))?;
+                Ok(())
+            },
+        )
+        .expect("seed managed baseline");
+        crate::config::write_json_file(&live_path, &json!({ "user_edit": true }))
+            .expect("write external edit");
+
+        let error = service
+            .check_live_takeover_conflicts()
+            .await
+            .expect_err("external edit must block full takeover before backup");
+        assert!(error.contains("已拒绝覆盖") || error.contains("refusing to overwrite"));
+        assert!(
+            db.get_live_backup("claude")
+                .await
+                .expect("read backup")
+                .is_none(),
+            "conflict preflight must not create a takeover backup"
         );
     }
 

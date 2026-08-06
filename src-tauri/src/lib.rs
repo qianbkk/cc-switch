@@ -1519,6 +1519,7 @@ pub fn run() {
             // Live 配置保护开关
             commands::get_protect_user_live_edits,
             commands::set_protect_user_live_edits,
+            commands::accept_current_live_config,
             commands::switch_proxy_provider,
             // Proxy failover commands
             commands::get_provider_health,

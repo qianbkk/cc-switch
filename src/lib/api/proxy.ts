@@ -57,6 +57,11 @@ export const proxyApi = {
     return invoke("set_protect_user_live_edits", { enabled });
   },
 
+  // 用户明确确认后，接受当前磁盘内容为一次性覆盖重试基线
+  async acceptCurrentLiveConfig(appType: string): Promise<void> {
+    return invoke("accept_current_live_config", { appType });
+  },
+
   // ========== v3+ 全局/应用级配置 API ==========
 
   // 获取全局代理配置

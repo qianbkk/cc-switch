@@ -30,7 +30,11 @@ import {
 } from "@/lib/query/proxy";
 import type { ProxyStatus } from "@/types/proxy";
 import { useTranslation } from "react-i18next";
-import { extractErrorMessage } from "@/utils/errorUtils";
+import { proxyApi, settingsApi } from "@/lib/api";
+import {
+  extractErrorMessage,
+  isLiveConfigModifiedError,
+} from "@/utils/errorUtils";
 
 interface ProxyPanelProps {
   enableLocalProxy: boolean;
@@ -99,22 +103,48 @@ export function ProxyPanel({
       const detail =
         extractErrorMessage(error) ||
         t("common.unknown", { defaultValue: "未知错误" });
-      // live_protection 抛出的 LiveConfigModifiedByUser 在 Rust 端的 Display
-      // 形如 "用户已修改 {app_type} 的 live 配置文件 (...)..."；前端用前缀判断
-      // 弹专用 toast 引导用户去关闭保护开关。两侧文案都覆盖，方便 i18n 兜底。
-      const lower = detail.toLowerCase();
-      const isModifiedByUser =
-        detail.startsWith("用户已修改") ||
-        detail.startsWith("User has modified") ||
-        lower.includes("live config") ||
-        lower.includes("refusing to overwrite");
-      if (isModifiedByUser) {
-        toast.error(
-          t("proxy.takeover.protect.modifiedToast", {
-            app: appType,
-            defaultValue: `${appType} live 配置已被手动修改；已拒绝覆盖。如需强制接管，请先关闭保护开关。`,
+      if (isLiveConfigModifiedError(error)) {
+        toast.warning(
+          t("notifications.liveConfigConflictTitle", {
+            defaultValue: "检测到外部 Live 配置修改",
           }),
-          { duration: 8000, closeButton: true },
+          {
+            description: t("notifications.liveConfigConflictDescription", {
+              defaultValue:
+                "默认取消以保护手动修改。你可以打开配置位置检查文件，或明确覆盖一次。",
+            }),
+            duration: Infinity,
+            closeButton: true,
+            action: {
+              label: t("notifications.liveConfigConflictOpen", {
+                defaultValue: "打开文件位置",
+              }),
+              onClick: () => {
+                void settingsApi.openConfigFolder(appType as any);
+              },
+            },
+            cancel: {
+              label: t("notifications.liveConfigConflictOverwrite", {
+                defaultValue: "覆盖一次",
+              }),
+              onClick: () => {
+                void (async () => {
+                  try {
+                    await proxyApi.acceptCurrentLiveConfig(appType);
+                    await handleTakeoverChange(appType, enabled);
+                  } catch (retryError) {
+                    toast.error(
+                      extractErrorMessage(retryError) ||
+                        t("proxy.takeover.failed", {
+                          detail,
+                          defaultValue: "切换接管状态失败",
+                        }),
+                    );
+                  }
+                })();
+              },
+            },
+          },
         );
         return;
       }

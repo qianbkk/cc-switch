@@ -60,16 +60,15 @@ pub enum AppError {
     AllProvidersCircuitOpen,
     #[error("未配置供应商")]
     NoProvidersConfigured,
-    /// 用户在接管后手动修改了 live 配置文件，ccswitch 拒绝覆盖。
+    /// 用户在 CC Switch 最近一次成功写盘后手动修改了 live 配置文件，拒绝覆盖。
     ///
-    /// 由 `live_protection::check_user_modified` 抛出，携带应用类型、
-    /// live 文件路径，以及备份（接管前的）hash 与磁盘当前 hash，
-    /// 便于上层在错误信息中提示用户前往查看 diff。
+    /// 由 `live_protection` 的统一保护入口抛出，携带应用类型、受保护文件路径、
+    /// 最近一次托管 hash 与磁盘当前 hash，便于上层提示用户确认冲突来源。
     #[error(
         "用户已修改 {app_type} 的 live 配置文件 ({path})，已拒绝覆盖以保护手动编辑；\n\
-         备份 hash: {expected_hash:?}，当前 hash: {actual_hash:?}\n\
+         托管 hash: {expected_hash:?}，当前 hash: {actual_hash:?}\n\
          User has modified {app_type} live config ({path}); refusing to overwrite.\n\
-         Backup hash: {expected_hash:?}, current hash: {actual_hash:?}"
+         Managed hash: {expected_hash:?}, current hash: {actual_hash:?}"
     )]
     LiveConfigModifiedByUser {
         app_type: String,
