@@ -241,6 +241,10 @@
     "removeFromConfigSuccess": "已从配置移除",
     "switchFailedTitle": "切换失败",
     "switchFailed": "切换失败：{{error}}",
+    "liveConfigConflictTitle": "检测到外部 Live 配置修改",
+    "liveConfigConflictDescription": "默认取消以保护手动修改。你可以打开配置位置检查文件，或明确覆盖一次。",
+    "liveConfigConflictOpen": "打开文件位置",
+    "liveConfigConflictOverwrite": "覆盖一次",
     "autoImported": "已从现有配置创建默认供应商",
     "addFailed": "添加供应商失败：{{error}}",
     "saveFailed": "保存失败：{{error}}",
@@ -2786,10 +2790,10 @@
       },
       "protect": {
         "title": "保护用户手动修改的 live 配置",
-        "description": "接管后，若用户手动修改了 Claude/Codex/Gemini/Grok Build 的 live 配置文件，则拒绝覆盖。仅当你想让 CC Switch 始终覆盖时再关闭。",
+        "description": "CC Switch 写入后，若你又手动修改了 Claude/Codex/Gemini/Grok Build 的 live 配置，后续切换、保存、同步和代理接管都会拒绝覆盖。Gemini 同时保护 .env 与 settings.json。仅当你明确要始终覆盖时再关闭。",
         "enabled": "Live 配置保护已开启",
         "disabled": "Live 配置保护已关闭（手动修改将被覆盖）",
-        "modifiedToast": "{{app}} live 配置已被手动修改；已拒绝覆盖。如需强制接管，请先关闭保护开关。"
+        "modifiedToast": "{{app}} live 配置已被手动修改；已拒绝覆盖。请先备份并处理冲突，或明确关闭保护后重试。"
       }
     },
     "failover": {

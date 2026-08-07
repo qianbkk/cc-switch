@@ -241,6 +241,10 @@
     "removeFromConfigSuccess": "Removed from config",
     "switchFailedTitle": "Switch failed",
     "switchFailed": "Switch failed: {{error}}",
+    "liveConfigConflictTitle": "External live config change detected",
+    "liveConfigConflictDescription": "The safe default is to cancel and preserve your edits. Open the config location to inspect the files, or explicitly overwrite once.",
+    "liveConfigConflictOpen": "Open file location",
+    "liveConfigConflictOverwrite": "Overwrite once",
     "autoImported": "Default provider created from existing configuration",
     "addFailed": "Failed to add provider: {{error}}",
     "saveFailed": "Save failed: {{error}}",
@@ -2786,10 +2790,10 @@
       },
       "protect": {
         "title": "Protect manually edited live configs",
-        "description": "Refuse to overwrite Claude/Codex/Gemini/Grok Build live configs that you've manually edited since takeover. Disable only if you want CC Switch to always overwrite.",
+        "description": "After CC Switch writes a Claude/Codex/Gemini/Grok Build live config, later external edits are protected from provider switches, saves, syncs, and proxy takeover. Gemini protects both .env and settings.json. Disable only when you explicitly want CC Switch to overwrite.",
         "enabled": "Live config protection enabled",
         "disabled": "Live config protection disabled (manual edits will be overwritten)",
-        "modifiedToast": "{{app}} live config was manually modified; takeover refused to overwrite. Disable protection to force overwrite."
+        "modifiedToast": "{{app}} live config was manually modified; overwrite was refused. Back up and resolve the conflict, or explicitly disable protection before retrying."
       }
     },
     "failover": {

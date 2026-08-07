@@ -1,11 +1,20 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { providersApi, sessionsApi, settingsApi, type AppId } from "@/lib/api";
+import {
+  providersApi,
+  proxyApi,
+  sessionsApi,
+  settingsApi,
+  type AppId,
+} from "@/lib/api";
 import type { DeleteSessionOptions } from "@/lib/api/sessions";
 import type { SwitchResult } from "@/lib/api/providers";
 import type { Provider, SessionMeta, Settings } from "@/types";
-import { extractErrorMessage } from "@/utils/errorUtils";
+import {
+  extractErrorMessage,
+  isLiveConfigModifiedError,
+} from "@/utils/errorUtils";
 import { generateUUID } from "@/utils/uuid";
 import { openclawKeys } from "@/hooks/useOpenClaw";
 import { invalidateHermesProviderCaches } from "@/hooks/useHermes";
@@ -15,6 +24,82 @@ import {
   CODEX_OFFICIAL_PROVIDER_ID,
   GROKBUILD_OFFICIAL_PROVIDER_ID,
 } from "@/utils/providerCapabilities";
+
+const LIVE_PROTECTED_APPS = new Set<AppId>([
+  "claude",
+  "codex",
+  "gemini",
+  "grokbuild",
+]);
+
+class LiveConflictCancelledError extends Error {
+  constructor() {
+    super("Live config overwrite cancelled");
+    this.name = "LiveConflictCancelledError";
+  }
+}
+
+async function retryAfterLiveConflict<T>(
+  appId: AppId,
+  operation: () => Promise<T>,
+  t: (key: string, options?: Record<string, unknown>) => string,
+): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (!LIVE_PROTECTED_APPS.has(appId) || !isLiveConfigModifiedError(error)) {
+      throw error;
+    }
+
+    const shouldOverwrite = await new Promise<boolean>((resolve) => {
+      let settled = false;
+      const finish = (value: boolean) => {
+        if (!settled) {
+          settled = true;
+          resolve(value);
+        }
+      };
+
+      toast.warning(
+        t("notifications.liveConfigConflictTitle", {
+          defaultValue: "检测到外部 Live 配置修改",
+        }),
+        {
+          description: t("notifications.liveConfigConflictDescription", {
+            defaultValue:
+              "默认取消以保护手动修改。你可以打开配置位置检查文件，或明确覆盖一次。",
+          }),
+          duration: Infinity,
+          closeButton: true,
+          action: {
+            label: t("notifications.liveConfigConflictOpen", {
+              defaultValue: "打开文件位置",
+            }),
+            onClick: () => {
+              void settingsApi.openConfigFolder(appId).catch(() => undefined);
+              finish(false);
+            },
+          },
+          cancel: {
+            label: t("notifications.liveConfigConflictOverwrite", {
+              defaultValue: "覆盖一次",
+            }),
+            onClick: () => finish(true),
+          },
+          onDismiss: () => finish(false),
+          onAutoClose: () => finish(false),
+        },
+      );
+    });
+
+    if (!shouldOverwrite) {
+      throw new LiveConflictCancelledError();
+    }
+
+    await proxyApi.acceptCurrentLiveConfig(appId);
+    return await operation();
+  }
+}
 
 export const useAddProviderMutation = (appId: AppId) => {
   const queryClient = useQueryClient();
@@ -168,7 +253,11 @@ export const useUpdateProviderMutation = (appId: AppId) => {
       provider: Provider;
       originalId?: string;
     }) => {
-      await providersApi.update(provider, appId, originalId);
+      await retryAfterLiveConflict(
+        appId,
+        () => providersApi.update(provider, appId, originalId),
+        t,
+      );
       return provider;
     },
     onSuccess: async (provider, variables) => {
@@ -199,6 +288,7 @@ export const useUpdateProviderMutation = (appId: AppId) => {
       );
     },
     onError: (error: Error) => {
+      if (error instanceof LiveConflictCancelledError) return;
       const detail = extractErrorMessage(error) || t("common.unknown");
       toast.error(
         t("notifications.updateFailed", {
@@ -282,7 +372,11 @@ export const useSwitchProviderMutation = (appId: AppId) => {
 
   return useMutation({
     mutationFn: async (providerId: string): Promise<SwitchResult> => {
-      return await providersApi.switch(providerId, appId);
+      return await retryAfterLiveConflict(
+        appId,
+        () => providersApi.switch(providerId, appId),
+        t,
+      );
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["providers", appId] });
@@ -330,6 +424,7 @@ export const useSwitchProviderMutation = (appId: AppId) => {
       }
     },
     onError: (error: Error) => {
+      if (error instanceof LiveConflictCancelledError) return;
       const detail = extractErrorMessage(error) || t("common.unknown");
 
       toast.error(

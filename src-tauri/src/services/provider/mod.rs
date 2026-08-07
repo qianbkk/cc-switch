@@ -89,7 +89,12 @@ pub fn reapply_current_codex_official_live(state: &AppState) -> Result<bool, App
         return Ok(true);
     }
 
-    live::write_live_with_common_config(&state.db, &AppType::Codex, provider)?;
+    live::write_live_with_common_config(
+        &state.db,
+        &AppType::Codex,
+        provider,
+        crate::live_protection::LiveWriteReason::InternalMigration,
+    )?;
     // 重写 live 会整体替换 config.toml（有意设计），[mcp_servers] 随之丢失，
     // 写完必须立刻从 DB 重新投影启用的 MCP。只投影 Codex 而非
     // sync_all_enabled：后者按 AppType::all() 顺序逐应用短路，排在 Codex
@@ -2581,7 +2586,12 @@ impl ProviderService {
             if !add_to_live {
                 return Ok(true);
             }
-            write_live_with_common_config(state.db.as_ref(), &app_type, &provider)?;
+            write_live_with_common_config(
+                state.db.as_ref(),
+                &app_type,
+                &provider,
+                crate::live_protection::LiveWriteReason::ProviderSave,
+            )?;
             return Ok(true);
         }
 
@@ -2592,7 +2602,12 @@ impl ProviderService {
             state
                 .db
                 .set_current_provider(app_type.as_str(), &provider.id)?;
-            write_live_with_common_config(state.db.as_ref(), &app_type, &provider)?;
+            write_live_with_common_config(
+                state.db.as_ref(),
+                &app_type,
+                &provider,
+                crate::live_protection::LiveWriteReason::ProviderSave,
+            )?;
         }
 
         Ok(true)
@@ -2743,7 +2758,12 @@ impl ProviderService {
             if !live_config_managed {
                 return Ok(true);
             }
-            write_live_with_common_config(state.db.as_ref(), &app_type, &provider)?;
+            write_live_with_common_config(
+                state.db.as_ref(),
+                &app_type,
+                &provider,
+                crate::live_protection::LiveWriteReason::ProviderSave,
+            )?;
             return Ok(true);
         }
 
@@ -2774,7 +2794,12 @@ impl ProviderService {
 
             if should_sync_via_proxy {
                 if matches!(app_type, AppType::ClaudeDesktop) {
-                    write_live_with_common_config(state.db.as_ref(), &app_type, &provider)?;
+                    write_live_with_common_config(
+                        state.db.as_ref(),
+                        &app_type,
+                        &provider,
+                        crate::live_protection::LiveWriteReason::ProviderSave,
+                    )?;
                 } else {
                     futures::executor::block_on(
                         state
@@ -2808,7 +2833,12 @@ impl ProviderService {
                     }
                 }
             } else {
-                write_live_with_common_config(state.db.as_ref(), &app_type, &provider)?;
+                write_live_with_common_config(
+                    state.db.as_ref(),
+                    &app_type,
+                    &provider,
+                    crate::live_protection::LiveWriteReason::ProviderSave,
+                )?;
                 // 重写 live 后只重投影本应用的 MCP：全量 sync_all_enabled 会把
                 // 无关应用的 live 损坏（如 ~/.claude.json 坏 JSON）牵连进保存
                 // 流程。走到这里 DB 与 live 都已按新配置落盘，保存事实上已
@@ -3150,7 +3180,12 @@ impl ProviderService {
         }
 
         // Sync to live (write_gemini_live handles security flag internally for Gemini)
-        write_live_with_common_config(state.db.as_ref(), &app_type, provider)?;
+        write_live_with_common_config(
+            state.db.as_ref(),
+            &app_type,
+            provider,
+            crate::live_protection::LiveWriteReason::ProviderSwitch,
+        )?;
 
         // A material-less official Codex provider gets a config-only live
         // write, which can leave the previous third-party key in
@@ -3286,7 +3321,12 @@ impl ProviderService {
         // here, not just proxy_config.enabled.
         if has_live_backup || live_taken_over {
             if matches!(app_type, AppType::ClaudeDesktop) {
-                write_live_with_common_config(state.db.as_ref(), &app_type, provider)?;
+                write_live_with_common_config(
+                    state.db.as_ref(),
+                    &app_type,
+                    provider,
+                    crate::live_protection::LiveWriteReason::ProviderSync,
+                )?;
                 return Ok(());
             }
 

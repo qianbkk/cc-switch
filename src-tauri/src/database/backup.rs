@@ -71,6 +71,7 @@ const SYNC_SKIP_TABLES: &[&str] = &[
     "stream_check_logs",
     "provider_health",
     "proxy_live_backup",
+    "live_managed_state",
     "usage_daily_rollups",
 ];
 
@@ -80,6 +81,7 @@ const SYNC_PRESERVE_TABLES: &[&str] = &[
     "proxy_request_logs",
     "stream_check_logs",
     "proxy_live_backup",
+    "live_managed_state",
     "usage_daily_rollups",
 ];
 
@@ -860,6 +862,11 @@ mod tests {
                 ) VALUES ('local-provider', 'Local Provider', 'claude', 'operational', 1, 'ok', 42, 200, 'claude-3', 0, 1000)",
                 [],
             )?;
+            conn.execute(
+                "INSERT INTO live_managed_state (app_type, managed_hash, updated_at)
+                 VALUES ('claude', 'local-managed-hash', '2026-08-06T00:00:00Z')",
+                [],
+            )?;
         }
 
         local_db.import_sql_string_for_sync(&remote_sql)?;
@@ -898,6 +905,18 @@ mod tests {
         assert_eq!(
             stream_logs, 1,
             "local stream check logs should be preserved"
+        );
+        let managed_hash: String = {
+            let conn = crate::database::lock_conn!(local_db.conn);
+            conn.query_row(
+                "SELECT managed_hash FROM live_managed_state WHERE app_type = 'claude'",
+                [],
+                |row| row.get(0),
+            )?
+        };
+        assert_eq!(
+            managed_hash, "local-managed-hash",
+            "local live managed state should be preserved"
         );
 
         Ok(())

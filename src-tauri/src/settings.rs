@@ -404,9 +404,9 @@ pub struct AppSettings {
     pub language: Option<String>,
 
     // ===== 魔改版专属 =====
-    /// 魔改功能总开关（fork 专属）。关闭后所有 fork 独有行为一律停用，
-    /// 应用回到与上游原版一致的行为；配置数据全部保留，重新打开即恢复。
-    /// 默认 true——这本来就是魔改版构建。
+    /// 核心运行时魔改开关（fork 专属）。关闭后统一网关、Live 配置保护与
+    /// Codex auth 反向同步停止介入；发行标识、更新通道和说明入口不受影响。
+    /// 配置数据全部保留，重新打开即恢复。默认 true。
     #[serde(default = "default_fork_features_enabled")]
     pub fork_features_enabled: bool,
 

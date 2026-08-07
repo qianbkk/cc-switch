@@ -271,7 +271,22 @@ impl Database {
         )
         .map_err(|e| AppError::Database(e.to_string()))?;
 
-        // 17. Usage Daily Rollups 表 (日聚合统计)
+        // 17. Live Managed State 表（普通切换/保存的本机写盘指纹）
+        //
+        // 与 proxy_live_backup 分离：后者是否存在是代理接管状态信号，普通写盘
+        // 不能插入备份行，否则会被误判为正在接管。该表只保存文件指纹，
+        // 不包含配置正文，并在 WebDAV/S3 同步时保留本机值。
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS live_managed_state (
+                app_type TEXT PRIMARY KEY,
+                managed_hash TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )",
+            [],
+        )
+        .map_err(|e| AppError::Database(e.to_string()))?;
+
+        // 18. Usage Daily Rollups 表 (日聚合统计)
         // request_model 保留路由接管的「客户端别名 → 真实模型」映射维度，
         // pricing_model 保留写入时的计价基准（request 计价模式下与 model 分叉），
         // 否则明细被 prune 后接管计费不可审计；历史行迁移时填 ''（未知）。
@@ -522,6 +537,11 @@ impl Database {
                         log::info!("迁移数据库从 v17 到 v18（重建 Codex 会话用量）");
                         Self::migrate_v17_to_v18(conn)?;
                         Self::set_user_version(conn, 18)?;
+                    }
+                    18 => {
+                        log::info!("迁移数据库从 v18 到 v19（新增普通 Live 写盘托管指纹）");
+                        Self::migrate_v18_to_v19(conn)?;
+                        Self::set_user_version(conn, 19)?;
                     }
                     _ => {
                         return Err(AppError::Database(format!(
@@ -1562,6 +1582,20 @@ impl Database {
     fn migrate_v17_to_v18(conn: &Connection) -> Result<(), AppError> {
         let codex_dir = crate::codex_config::get_codex_config_dir();
         crate::services::session_usage_codex::reset_codex_usage_on_conn(conn, &codex_dir)
+    }
+
+    /// v18 -> v19: 新增普通 Live 写盘的本机托管指纹。
+    fn migrate_v18_to_v19(conn: &Connection) -> Result<(), AppError> {
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS live_managed_state (
+                app_type TEXT PRIMARY KEY,
+                managed_hash TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )",
+            [],
+        )
+        .map_err(|e| AppError::Database(e.to_string()))?;
+        Ok(())
     }
 
     /// 插入默认模型定价数据
@@ -3284,6 +3318,35 @@ mod tests {
         )?;
         assert_eq!(original_config, "{}");
 
+        Ok(())
+    }
+
+    #[test]
+    fn migrate_v18_to_v19_adds_live_managed_state() -> Result<(), AppError> {
+        let conn = Connection::open_in_memory()?;
+        Database::create_tables_on_conn(&conn)?;
+        conn.execute("DROP TABLE live_managed_state", [])?;
+        Database::set_user_version(&conn, 18)?;
+
+        Database::apply_schema_migrations_on_conn(&conn)?;
+
+        assert_eq!(Database::get_user_version(&conn)?, SCHEMA_VERSION);
+        assert!(Database::table_exists(&conn, "live_managed_state")?);
+        assert!(Database::has_column(
+            &conn,
+            "live_managed_state",
+            "app_type"
+        )?);
+        assert!(Database::has_column(
+            &conn,
+            "live_managed_state",
+            "managed_hash"
+        )?);
+        assert!(Database::has_column(
+            &conn,
+            "live_managed_state",
+            "updated_at"
+        )?);
         Ok(())
     }
 

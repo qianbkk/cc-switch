@@ -8,14 +8,28 @@ import type { Provider } from "@/types";
 
 const apiMocks = vi.hoisted(() => ({
   update: vi.fn(),
+  acceptCurrentLiveConfig: vi.fn(),
+  openConfigFolder: vi.fn(),
+}));
+const toastMocks = vi.hoisted(() => ({
+  success: vi.fn(),
+  error: vi.fn(),
+  warning: vi.fn(),
 }));
 
 vi.mock("@/lib/api", () => ({
   providersApi: {
     update: (...args: unknown[]) => apiMocks.update(...args),
   },
+  proxyApi: {
+    acceptCurrentLiveConfig: (...args: unknown[]) =>
+      apiMocks.acceptCurrentLiveConfig(...args),
+  },
   sessionsApi: {},
-  settingsApi: {},
+  settingsApi: {
+    openConfigFolder: (...args: unknown[]) =>
+      apiMocks.openConfigFolder(...args),
+  },
 }));
 
 vi.mock("@/hooks/useHermes", () => ({
@@ -36,10 +50,7 @@ vi.mock("react-i18next", () => ({
 }));
 
 vi.mock("sonner", () => ({
-  toast: {
-    success: vi.fn(),
-    error: vi.fn(),
-  },
+  toast: toastMocks,
 }));
 
 function createWrapper() {
@@ -69,6 +80,11 @@ function createProvider(overrides: Partial<Provider> = {}): Provider {
 
 beforeEach(() => {
   apiMocks.update.mockReset().mockResolvedValue(true);
+  apiMocks.acceptCurrentLiveConfig.mockReset().mockResolvedValue(undefined);
+  apiMocks.openConfigFolder.mockReset().mockResolvedValue(undefined);
+  toastMocks.success.mockReset();
+  toastMocks.error.mockReset();
+  toastMocks.warning.mockReset();
 });
 
 describe("useUpdateProviderMutation", () => {
@@ -123,5 +139,31 @@ describe("useUpdateProviderMutation", () => {
     expect(invalidateSpy).not.toHaveBeenCalledWith({
       queryKey: usageKeys.all,
     });
+  });
+
+  it("accepts the current live fingerprint and retries exactly once after confirmation", async () => {
+    const conflict =
+      "用户已修改 codex 的 live 配置文件 (config.toml)，已拒绝覆盖以保护手动编辑";
+    apiMocks.update.mockRejectedValueOnce(conflict).mockResolvedValueOnce(true);
+    toastMocks.warning.mockImplementation(
+      (_title: unknown, options: { cancel?: { onClick?: () => void } }) => {
+        options.cancel?.onClick?.();
+        return "toast-id";
+      },
+    );
+
+    const { wrapper } = createWrapper();
+    const provider = createProvider();
+    const { result } = renderHook(() => useUpdateProviderMutation("codex"), {
+      wrapper,
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ provider });
+    });
+
+    expect(apiMocks.acceptCurrentLiveConfig).toHaveBeenCalledWith("codex");
+    expect(apiMocks.update).toHaveBeenCalledTimes(2);
+    expect(toastMocks.error).not.toHaveBeenCalled();
   });
 });
