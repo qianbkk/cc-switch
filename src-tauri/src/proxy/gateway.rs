@@ -34,7 +34,7 @@
 
 use super::{
     forwarder::RequestForwarder,
-    hyper_client::ProxyResponse,
+    hyper_client::{ProxyResponse, MAX_RESPONSE_BODY_BYTES},
     providers::{
         streaming, streaming_anthropic_chat, streaming_codex_anthropic, streaming_gemini,
         streaming_responses, transform, transform_responses,
@@ -370,7 +370,7 @@ async fn proxy_response_to_axum(
     }
 
     // 非流式路径：读完整 body
-    let bytes = match resp.bytes().await {
+    let bytes = match resp.bytes_with_limit(MAX_RESPONSE_BODY_BYTES).await {
         Ok(b) => b,
         Err(e) => {
             return error_to_response(ProxyError::Internal(format!("read upstream body: {e}")));
