@@ -194,8 +194,7 @@ fn collect_storage_info() -> StorageInfo {
     let mut items: Vec<StorageItem> = Vec::new();
 
     // 1) 数据库
-    let db_schema_version;
-    {
+    let db_schema_version = {
         let db_path = base_dir.join("cc-switch.db");
         let mut item = StorageItem {
             path: db_path.to_string_lossy().to_string(),
@@ -222,9 +221,9 @@ fn collect_storage_info() -> StorageInfo {
         } else {
             item.error = Some("数据库文件不存在".to_string());
         }
-        db_schema_version = item.schema_version;
         items.push(item);
-    }
+        item.schema_version
+    };
 
     // 2) 固定条目：config.json / settings.json / backups / logs / skills / crash.log
     let fixed_entries: Vec<(String, String, String)> = vec![
