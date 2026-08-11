@@ -383,6 +383,8 @@ export interface StorageItem {
   sizeBytes: number | null;
   recordCount: number | null;
   error: string | null;
+  /** 数据库 schema 版本（仅 database 条目且可读时非 null） */
+  schemaVersion: number | null;
 }
 
 /** 数据存储信息总览（后端 StorageInfo 的镜像，camelCase） */
@@ -390,6 +392,10 @@ export interface StorageInfo {
   baseDir: string;
   totalSizeBytes: number;
   items: StorageItem[];
+  /** 数据库当前 schema 版本（不可读/不存在时为 null） */
+  dbSchemaVersion: number | null;
+  /** 最近一次数据库备份文件名（无备份时为 null） */
+  latestDbBackup: string | null;
 }
 
 export interface BackupEntry {

@@ -133,6 +133,30 @@ export function StorageInfoSection() {
             )}
           </span>
         </div>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          <span>
+            {t("settings.advanced.storageInfo.dbSchemaVersion", {
+              defaultValue: "数据库 Schema 版本",
+            })}
+            :{" "}
+            <span className="font-mono font-medium text-foreground">
+              {isLoading
+                ? "…"
+                : data?.dbSchemaVersion != null
+                  ? `v${data.dbSchemaVersion}`
+                  : "—"}
+            </span>
+          </span>
+          <span>
+            {t("settings.advanced.storageInfo.latestDbBackup", {
+              defaultValue: "最近备份",
+            })}
+            :{" "}
+            <span className="font-mono text-foreground">
+              {isLoading ? "…" : (data?.latestDbBackup ?? "—")}
+            </span>
+          </span>
+        </div>
       </div>
 
       {/* 条目列表 */}
@@ -186,6 +210,14 @@ export function StorageInfoSection() {
                       {t("settings.advanced.storageInfo.notExists", {
                         defaultValue: "不存在",
                       })}
+                    </Badge>
+                  )}
+                  {item.schemaVersion != null && (
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] px-1.5 py-0 font-mono"
+                    >
+                      v{item.schemaVersion}
                     </Badge>
                   )}
                 </div>

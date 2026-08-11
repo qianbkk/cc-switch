@@ -376,6 +376,8 @@
         "refresh": "重新整理",
         "size": "大小",
         "records": "記錄",
+        "dbSchemaVersion": "資料庫 Schema 版本",
+        "latestDbBackup": "最近備份",
         "notExists": "不存在",
         "loadFailed": "取得儲存資訊失敗",
         "openFailed": "開啟路徑失敗",

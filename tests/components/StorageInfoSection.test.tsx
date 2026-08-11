@@ -25,6 +25,8 @@ const DB_PATH = "C:/Users/tester/.cc-switch/cc-switch.db";
 const sampleInfo: StorageInfo = {
   baseDir: "C:/Users/tester/.cc-switch",
   totalSizeBytes: 1048576 + 2048,
+  dbSchemaVersion: 19,
+  latestDbBackup: "db_backup_20260807_000000.db",
   items: [
     {
       path: DB_PATH,
@@ -35,6 +37,7 @@ const sampleInfo: StorageInfo = {
       sizeBytes: 1048576,
       recordCount: 12,
       error: null,
+      schemaVersion: 19,
     },
     {
       path: "C:/Users/tester/.cc-switch/logs",
@@ -45,6 +48,7 @@ const sampleInfo: StorageInfo = {
       sizeBytes: 2048,
       recordCount: 3,
       error: null,
+      schemaVersion: null,
     },
     {
       path: "C:/Users/tester/.cc-switch/missing.json",
@@ -55,6 +59,7 @@ const sampleInfo: StorageInfo = {
       sizeBytes: null,
       recordCount: null,
       error: "路径不存在",
+      schemaVersion: null,
     },
   ],
 };
@@ -89,6 +94,19 @@ describe("StorageInfoSection Component", () => {
     expect(screen.getByText(/12/)).toBeInTheDocument(); // record count
     expect(screen.getByText("logs")).toBeInTheDocument();
     expect(screen.getByText(/3/)).toBeInTheDocument(); // file count
+  });
+
+  it("shows database schema version and latest backup metadata", async () => {
+    getStorageInfoMock.mockResolvedValue(sampleInfo);
+    renderWithQuery();
+
+    await screen.findByText("cc-switch.db");
+    // Top-level summary shows schema version v19 and the latest backup filename
+    expect(
+      screen.getByText("db_backup_20260807_000000.db"),
+    ).toBeInTheDocument();
+    // "v19" appears twice: once in the summary, once as the db entry badge
+    expect(screen.getAllByText("v19").length).toBeGreaterThanOrEqual(2);
   });
 
   it("does not leak sensitive values like api keys", async () => {
