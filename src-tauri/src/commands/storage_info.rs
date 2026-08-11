@@ -221,8 +221,9 @@ fn collect_storage_info() -> StorageInfo {
         } else {
             item.error = Some("数据库文件不存在".to_string());
         }
+        let schema_version = item.schema_version;
         items.push(item);
-        item.schema_version
+        schema_version
     };
 
     // 2) 固定条目：config.json / settings.json / backups / logs / skills / crash.log
