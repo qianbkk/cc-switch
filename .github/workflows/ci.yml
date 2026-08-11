@@ -13,6 +13,7 @@ concurrency:
 jobs:
   frontend:
     name: Frontend Checks
+    # 前端检查与平台无关，保留 ubuntu runner（更快更便宜）
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -61,12 +62,9 @@ jobs:
           node scripts/verify-embedded-assets.mjs --check-dist-only
 
   backend:
-    name: Backend Checks
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-22.04, windows-latest, macos-latest]
+    name: Backend Checks (windows)
+    # 魔改版仅维护 Windows 平台，不再跑 macOS/Linux 后端检查
+    runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -75,18 +73,6 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-
-      - name: Install Linux system deps
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential pkg-config libssl-dev \
-            libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev
-          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev \
-            || sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.0-dev
-          sudo apt-get install -y --no-install-recommends libsoup-3.0-dev \
-            || sudo apt-get install -y --no-install-recommends libsoup2.4-dev
 
       - name: Cache Cargo registry and build
         uses: actions/cache@v5
