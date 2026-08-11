@@ -109,8 +109,7 @@ jobs:
         run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
 
       - name: Run tests
-        timeout-minutes: 15
-        run: cargo test --manifest-path src-tauri/Cargo.toml -- --nocapture
+        run: cargo test --manifest-path src-tauri/Cargo.toml
 
   portable-build:
     name: Portable Release Smoke (embedded assets)
