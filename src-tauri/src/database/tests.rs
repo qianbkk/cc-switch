@@ -324,7 +324,10 @@ fn file_init_rejects_future_version_before_writing_schema() {
     Database::set_user_version(&conn, SCHEMA_VERSION + 1).expect("set future version");
     drop(conn);
 
-    let error = Database::open_and_migrate_at_path(&db_path).expect_err("future version must fail");
+    let error = match Database::open_and_migrate_at_path(&db_path) {
+        Ok(_) => panic!("future version must fail"),
+        Err(e) => e,
+    };
     assert!(error.to_string().contains("数据库版本过新"));
 
     let conn = Connection::open(&db_path).expect("reopen future-version database");
@@ -346,8 +349,10 @@ fn file_init_aborts_upgrade_when_pre_migration_backup_fails() {
     create_release_v18_fixture(&db_path);
     fs::write(temp.path().join("backups"), "not a directory").expect("block backup directory");
 
-    let error =
-        Database::open_and_migrate_at_path(&db_path).expect_err("backup failure must abort");
+    let error = match Database::open_and_migrate_at_path(&db_path) {
+        Ok(_) => panic!("backup failure must abort"),
+        Err(e) => e,
+    };
     let message = error.to_string();
     assert!(
         message.contains("IO 错误") || message.contains("备份") || message.contains("directory"),
