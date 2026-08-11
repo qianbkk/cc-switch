@@ -355,6 +355,17 @@ impl Database {
     /// 生成一致性快照备份，返回备份文件路径（不存在主库时返回 None）
     pub(crate) fn backup_database_file(&self) -> Result<Option<PathBuf>, AppError> {
         let db_path = get_app_config_dir().join("cc-switch.db");
+        self.backup_database_file_to(&db_path)
+    }
+
+    /// 为指定数据库路径生成一致性快照。
+    ///
+    /// 初始化流程使用该入口，确保自定义数据目录和测试 fixture 的迁移前备份
+    /// 与实际打开的数据库位于同一目录，不依赖全局路径推导。
+    pub(crate) fn backup_database_file_to(
+        &self,
+        db_path: &Path,
+    ) -> Result<Option<PathBuf>, AppError> {
         if !db_path.exists() {
             return Ok(None);
         }

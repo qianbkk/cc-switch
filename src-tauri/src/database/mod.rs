@@ -47,6 +47,7 @@ use crate::config::get_app_config_dir;
 use crate::error::AppError;
 use rusqlite::{hooks::Action, Connection};
 use serde::Serialize;
+use std::path::Path;
 use std::sync::Mutex;
 
 // DAO 方法通过 impl Database 提供，无需额外导出
@@ -99,47 +100,8 @@ impl Database {
     /// 数据库文件位于 `~/.cc-switch/cc-switch.db`
     pub fn init() -> Result<Self, AppError> {
         let db_path = get_app_config_dir().join("cc-switch.db");
-        let db_exists = db_path.exists();
+        let db = Self::open_and_migrate_at_path(&db_path)?;
 
-        // 确保父目录存在
-        if let Some(parent) = db_path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| AppError::io(parent, e))?;
-        }
-
-        let conn = Connection::open(&db_path).map_err(|e| AppError::Database(e.to_string()))?;
-
-        // 启用外键约束
-        conn.execute("PRAGMA foreign_keys = ON;", [])
-            .map_err(|e| AppError::Database(e.to_string()))?;
-        if !db_exists {
-            // For a brand-new database, configure incremental auto-vacuum
-            // before creating any tables so no rebuild is needed later.
-            conn.execute("PRAGMA auto_vacuum = INCREMENTAL;", [])
-                .map_err(|e| AppError::Database(e.to_string()))?;
-        }
-        register_db_change_hook(&conn);
-
-        let db = Self {
-            conn: Mutex::new(conn),
-        };
-        db.create_tables()?;
-
-        // Pre-migration backup: only when upgrading from an existing database
-        {
-            let conn = lock_conn!(db.conn);
-            let version = Self::get_user_version(&conn)?;
-            drop(conn);
-            if version > 0 && version < SCHEMA_VERSION {
-                log::info!(
-                    "Creating pre-migration database backup (v{version} → v{SCHEMA_VERSION})"
-                );
-                if let Err(e) = db.backup_database_file() {
-                    log::warn!("Pre-migration backup failed, continuing migration: {e}");
-                }
-            }
-        }
-
-        db.apply_schema_migrations()?;
         if let Err(e) = db.ensure_incremental_auto_vacuum() {
             log::warn!("Failed to ensure incremental auto-vacuum: {e}");
         }
@@ -163,6 +125,62 @@ impl Database {
             }
         }
 
+        Ok(db)
+    }
+
+    /// 打开数据库并完成版本门禁、迁移前备份、建表和 Schema 迁移。
+    ///
+    /// 与启动维护分离，使文件级迁移测试可以使用临时目录验证升级流程，且不会读取
+    /// 用户的本地模型定价文件或执行日志清理。
+    fn open_and_migrate_at_path(db_path: &Path) -> Result<Self, AppError> {
+        let db_exists = db_path.exists();
+
+        // 确保父目录存在
+        if let Some(parent) = db_path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| AppError::io(parent, e))?;
+        }
+
+        let conn = Connection::open(db_path).map_err(|e| AppError::Database(e.to_string()))?;
+
+        // 启用外键约束
+        conn.execute("PRAGMA foreign_keys = ON;", [])
+            .map_err(|e| AppError::Database(e.to_string()))?;
+        if !db_exists {
+            // For a brand-new database, configure incremental auto-vacuum
+            // before creating any tables so no rebuild is needed later.
+            conn.execute("PRAGMA auto_vacuum = INCREMENTAL;", [])
+                .map_err(|e| AppError::Database(e.to_string()))?;
+        }
+        register_db_change_hook(&conn);
+
+        let db = Self {
+            conn: Mutex::new(conn),
+        };
+
+        // 必须先读取版本并完成门禁/备份，再执行 create_tables：后者会补表、修复旧结构
+        // 并执行 DDL。这样未来版本不会在拒绝前被写入，升级备份也保持原始快照。
+        if db_exists {
+            let version = {
+                let conn = lock_conn!(db.conn);
+                Self::get_user_version(&conn)?
+            };
+            if version > SCHEMA_VERSION {
+                return Err(AppError::Database(format!(
+                    "数据库版本过新（{version}），当前应用仅支持 {SCHEMA_VERSION}，请升级应用后再尝试。"
+                )));
+            }
+            if version > 0 && version < SCHEMA_VERSION {
+                log::info!(
+                    "Creating pre-migration database backup (v{version} → v{SCHEMA_VERSION})"
+                );
+                db.backup_database_file_to(db_path)?.ok_or_else(|| {
+                    AppError::Database("创建迁移前数据库备份失败：数据库文件不存在".to_string())
+                })?;
+            }
+        }
+
+        db.create_tables()?;
+        db.apply_schema_migrations()?;
         Ok(db)
     }
 

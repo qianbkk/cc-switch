@@ -9,7 +9,9 @@ use indexmap::IndexMap;
 use rusqlite::{params, Connection};
 use serde_json::json;
 use std::collections::HashMap;
-use tempfile::NamedTempFile;
+use std::fs;
+use std::path::{Path, PathBuf};
+use tempfile::{NamedTempFile, TempDir};
 
 const LEGACY_SCHEMA_SQL: &str = r#"
     CREATE TABLE providers (
@@ -149,6 +151,272 @@ fn normalize_default(default: &Option<String>) -> Option<String> {
     default
         .as_ref()
         .map(|s| s.trim_matches('\'').trim_matches('"').to_string())
+}
+
+/// 构造 `m3.19.1-2` 发布版（schema v18）的等价去敏数据库。
+///
+/// 当前 v19 相对该发布版只新增 `live_managed_state`；先用当前建表代码得到其余
+/// v18 表结构，再删除该表并把 `user_version` 设回 18，可避免维护一份易漂移的
+/// 超长 SQL fixture，同时仍能精确验证发布版到当前版的文件级启动流程。
+fn create_release_v18_fixture(path: &Path) {
+    let conn = Connection::open(path).expect("open release v18 fixture");
+    Database::create_tables_on_conn(&conn).expect("create release tables");
+    conn.execute("DROP TABLE live_managed_state", [])
+        .expect("remove v19-only table");
+    Database::set_user_version(&conn, 18).expect("set release schema version");
+
+    conn.execute(
+        "INSERT INTO providers (
+            id, app_type, name, settings_config, meta, is_current, in_failover_queue
+         ) VALUES (?1, ?2, ?3, ?4, '{}', 1, 0)",
+        params![
+            "release-provider",
+            "claude",
+            "Release Provider",
+            r#"{"apiKey":"fixture-key","baseUrl":"https://fixture.invalid"}"#
+        ],
+    )
+    .expect("seed release provider");
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES (?1, ?2)",
+        params![
+            "gateway_config",
+            r#"{"enabled":true,"apiKey":"ccs-fixture","models":[{"alias":"fixture","appType":"claude","providerId":"release-provider","model":"claude-fixture"}]}"#
+        ],
+    )
+    .expect("seed gateway config");
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES (?1, ?2)",
+        params!["fixture_setting", "fixture-value"],
+    )
+    .expect("seed application setting");
+    conn.execute(
+        "UPDATE proxy_config
+         SET proxy_enabled = 1, listen_port = 17777, max_retries = 7
+         WHERE app_type = 'claude'",
+        [],
+    )
+    .expect("seed proxy config");
+    conn.execute(
+        "INSERT INTO proxy_live_backup (
+            app_type, original_config, backed_up_at, original_hash, managed_hash
+         ) VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![
+            "claude",
+            r#"{"apiKey":"user-original"}"#,
+            "2026-08-07T00:00:00Z",
+            "original-fixture-hash",
+            "managed-fixture-hash"
+        ],
+    )
+    .expect("seed live backup");
+}
+
+fn only_db_backup(backup_dir: &Path) -> PathBuf {
+    let mut backups = fs::read_dir(backup_dir)
+        .expect("read backup directory")
+        .map(|entry| entry.expect("read backup entry").path())
+        .filter(|path| path.extension().is_some_and(|extension| extension == "db"))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        backups.len(),
+        1,
+        "migration should create exactly one backup"
+    );
+    backups.pop().expect("pre-migration backup")
+}
+
+#[test]
+fn file_init_upgrades_release_v18_and_keeps_pre_migration_snapshot() {
+    let temp = TempDir::new().expect("create migration temp directory");
+    let db_path = temp.path().join("cc-switch.db");
+    create_release_v18_fixture(&db_path);
+
+    let db = Database::open_and_migrate_at_path(&db_path).expect("upgrade release fixture");
+    let conn = db.conn.lock().expect("lock upgraded database");
+    assert_eq!(
+        Database::get_user_version(&conn).expect("read upgraded version"),
+        19
+    );
+
+    let provider: (String, String) = conn
+        .query_row(
+            "SELECT name, settings_config FROM providers
+             WHERE id = 'release-provider' AND app_type = 'claude'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("read retained provider");
+    assert_eq!(provider.0, "Release Provider");
+    assert!(provider.1.contains("fixture-key"));
+
+    let setting: String = conn
+        .query_row(
+            "SELECT value FROM settings WHERE key = 'fixture_setting'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("read retained setting");
+    assert_eq!(setting, "fixture-value");
+
+    let gateway: String = conn
+        .query_row(
+            "SELECT value FROM settings WHERE key = 'gateway_config'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("read retained gateway config");
+    assert!(gateway.contains("ccs-fixture"));
+
+    let proxy: (i64, i64) = conn
+        .query_row(
+            "SELECT proxy_enabled, listen_port FROM proxy_config WHERE app_type = 'claude'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("read retained proxy config");
+    assert_eq!(proxy, (1, 17777));
+
+    let live_backup: (String, String, String) = conn
+        .query_row(
+            "SELECT original_config, original_hash, managed_hash
+             FROM proxy_live_backup WHERE app_type = 'claude'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .expect("read retained live backup");
+    assert_eq!(live_backup.0, r#"{"apiKey":"user-original"}"#);
+    assert_eq!(live_backup.1, "original-fixture-hash");
+    assert_eq!(live_backup.2, "managed-fixture-hash");
+    assert!(Database::table_exists(&conn, "live_managed_state").expect("check v19 table"));
+    drop(conn);
+    drop(db);
+
+    let backup_path = only_db_backup(&temp.path().join("backups"));
+    let backup_conn = Connection::open(&backup_path).expect("open pre-migration backup");
+    assert_eq!(
+        Database::get_user_version(&backup_conn).expect("read backup version"),
+        18
+    );
+    assert!(
+        !Database::table_exists(&backup_conn, "live_managed_state").expect("check backup schema"),
+        "pre-migration snapshot must not contain the v19-only table"
+    );
+    let retained_backup: String = backup_conn
+        .query_row(
+            "SELECT original_config FROM proxy_live_backup WHERE app_type = 'claude'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("read live backup from snapshot");
+    assert_eq!(retained_backup, r#"{"apiKey":"user-original"}"#);
+}
+
+#[test]
+fn file_init_rejects_future_version_before_writing_schema() {
+    let temp = TempDir::new().expect("create future-version temp directory");
+    let db_path = temp.path().join("cc-switch.db");
+    let conn = Connection::open(&db_path).expect("open future-version database");
+    conn.execute("CREATE TABLE sentinel (value TEXT NOT NULL)", [])
+        .expect("create sentinel");
+    conn.execute("INSERT INTO sentinel (value) VALUES ('untouched')", [])
+        .expect("seed sentinel");
+    Database::set_user_version(&conn, SCHEMA_VERSION + 1).expect("set future version");
+    drop(conn);
+
+    let error = Database::open_and_migrate_at_path(&db_path).expect_err("future version must fail");
+    assert!(error.to_string().contains("数据库版本过新"));
+
+    let conn = Connection::open(&db_path).expect("reopen future-version database");
+    assert_eq!(
+        Database::get_user_version(&conn).expect("read future version"),
+        SCHEMA_VERSION + 1
+    );
+    assert!(!Database::table_exists(&conn, "providers").expect("check untouched schema"));
+    let value: String = conn
+        .query_row("SELECT value FROM sentinel", [], |row| row.get(0))
+        .expect("read sentinel");
+    assert_eq!(value, "untouched");
+}
+
+#[test]
+fn file_init_aborts_upgrade_when_pre_migration_backup_fails() {
+    let temp = TempDir::new().expect("create backup-failure temp directory");
+    let db_path = temp.path().join("cc-switch.db");
+    create_release_v18_fixture(&db_path);
+    fs::write(temp.path().join("backups"), "not a directory").expect("block backup directory");
+
+    let error =
+        Database::open_and_migrate_at_path(&db_path).expect_err("backup failure must abort");
+    let message = error.to_string();
+    assert!(
+        message.contains("IO 错误") || message.contains("备份") || message.contains("directory"),
+        "unexpected error message: {message}"
+    );
+
+    let conn = Connection::open(&db_path).expect("reopen unchanged database");
+    assert_eq!(
+        Database::get_user_version(&conn).expect("read unchanged version"),
+        18
+    );
+    assert!(!Database::table_exists(&conn, "live_managed_state").expect("check unchanged schema"));
+}
+
+#[test]
+fn schema_migration_rolls_back_schema_and_data_when_a_step_fails() {
+    let conn = Connection::open_in_memory().expect("open rollback database");
+    Database::create_tables_on_conn(&conn).expect("create rollback schema");
+    conn.execute(
+        "INSERT INTO providers (id, app_type, name, settings_config)
+         VALUES ('rollback-provider', 'claude', 'Before rollback', '{}')",
+        [],
+    )
+    .expect("seed rollback provider");
+    conn.execute(
+        "INSERT INTO proxy_request_logs (
+            request_id, provider_id, app_type, model, input_tokens,
+            output_tokens, cache_read_tokens, latency_ms, status_code,
+            created_at, data_source
+         ) VALUES ('rollback-codex', '_codex_session', 'codex', 'gpt', 1, 1, 0, 0, 200, 1, 'codex_session')",
+        [],
+    )
+    .expect("seed codex row");
+    conn.execute_batch(
+        "CREATE TRIGGER fail_codex_reset
+         BEFORE DELETE ON proxy_request_logs
+         WHEN OLD.data_source = 'codex_session'
+         BEGIN
+             SELECT RAISE(ABORT, 'fixture migration failure');
+         END;",
+    )
+    .expect("create migration failure trigger");
+    Database::set_user_version(&conn, 17).expect("set rollback version");
+
+    let error = Database::apply_schema_migrations_on_conn(&conn)
+        .expect_err("migration should fail through fixture trigger");
+    assert!(error.to_string().contains("fixture migration failure"));
+    assert_eq!(
+        Database::get_user_version(&conn).expect("read rolled back version"),
+        17
+    );
+    assert!(!Database::table_exists(&conn, "live_managed_state").expect("check rolled back schema"));
+
+    let provider_name: String = conn
+        .query_row(
+            "SELECT name FROM providers WHERE id = 'rollback-provider'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("read rolled back provider");
+    assert_eq!(provider_name, "Before rollback");
+    let codex_rows: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM proxy_request_logs WHERE request_id = 'rollback-codex'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("count rolled back codex row");
+    assert_eq!(codex_rows, 1);
 }
 
 #[test]
