@@ -1447,7 +1447,9 @@ mod tests {
     #[serial]
     fn sync_import_preserves_local_only_tables() -> Result<(), AppError> {
         let _test_home = TestHomeGuard::new();
+        eprintln!("[sync_import] step1 TestHomeGuard ready");
         let remote_db = Database::memory()?;
+        eprintln!("[sync_import] step2 remote_db ready");
         {
             let conn = crate::database::lock_conn!(remote_db.conn);
             conn.execute_batch(
@@ -1475,8 +1477,10 @@ mod tests {
             )?;
         }
         let remote_sql = remote_db.export_sql_string_for_sync()?;
+        eprintln!("[sync_import] step3 remote_sql len={}", remote_sql.len());
         let exported = Connection::open_in_memory()?;
         exported.execute_batch(&remote_sql)?;
+        eprintln!("[sync_import] step3b remote_sql executed on exported");
         let skipped_counts: (i64, i64, i64, i64, i64) = exported.query_row(
             "SELECT
                 (SELECT COUNT(*) FROM proxy_request_logs),
@@ -1498,6 +1502,7 @@ mod tests {
         assert_eq!(skipped_counts, (0, 0, 0, 0, 0));
 
         let local_db = Database::memory()?;
+        eprintln!("[sync_import] step4 local_db ready");
         {
             let conn = crate::database::lock_conn!(local_db.conn);
             conn.execute_batch(
@@ -1531,6 +1536,7 @@ mod tests {
         }
 
         local_db.import_sql_string_for_sync(&remote_sql)?;
+        eprintln!("[sync_import] step5 import done");
 
         let conn = crate::database::lock_conn!(local_db.conn);
         let providers = conn
