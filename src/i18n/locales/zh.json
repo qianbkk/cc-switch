@@ -380,6 +380,8 @@
         "refresh": "刷新",
         "size": "大小",
         "records": "记录",
+        "dbSchemaVersion": "数据库 Schema 版本",
+        "latestDbBackup": "最近备份",
         "notExists": "不存在",
         "loadFailed": "获取存储信息失败",
         "openFailed": "打开路径失败",

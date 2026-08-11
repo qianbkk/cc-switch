@@ -376,6 +376,8 @@
         "refresh": "更新",
         "size": "サイズ",
         "records": "レコード",
+        "dbSchemaVersion": "DBスキーマバージョン",
+        "latestDbBackup": "最新バックアップ",
         "notExists": "存在しません",
         "loadFailed": "保存情報の取得に失敗しました",
         "openFailed": "パスを開けませんでした",

@@ -380,6 +380,8 @@
         "refresh": "Refresh",
         "size": "Size",
         "records": "Records",
+        "dbSchemaVersion": "DB schema version",
+        "latestDbBackup": "Latest backup",
         "notExists": "Missing",
         "loadFailed": "Failed to load storage info",
         "openFailed": "Failed to open path",

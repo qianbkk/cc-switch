@@ -53,6 +53,8 @@ pub struct StorageItem {
     pub record_count: Option<u64>,
     /// 读取失败时的错误描述（不存在 / 无权限 / 损坏等），正常时为 null。
     pub error: Option<String>,
+    /// 数据库 schema 版本（`PRAGMA user_version`）；仅 database 条目且可读时非 null。
+    pub schema_version: Option<i32>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -63,6 +65,10 @@ pub struct StorageInfo {
     /// 所有条目大小合计（字节）
     pub total_size_bytes: u64,
     pub items: Vec<StorageItem>,
+    /// 数据库当前 schema 版本（不可读/不存在时为 null）
+    pub db_schema_version: Option<i32>,
+    /// 最近一次数据库备份的文件名（backups 目录中最新 `db_backup_*.db`），无备份时为 null
+    pub latest_db_backup: Option<String>,
 }
 
 fn purpose_label(kind: &str) -> String {
@@ -153,13 +159,42 @@ fn db_table_row_counts(db_path: &Path) -> Result<Vec<(String, u64)>, String> {
     Ok(out)
 }
 
+/// 读取数据库 schema 版本（`PRAGMA user_version`）；不可读时返回 None
+fn db_schema_version(db_path: &Path) -> Option<i32> {
+    let conn = rusqlite::Connection::open(db_path).ok()?;
+    conn.query_row("PRAGMA user_version", [], |row| row.get(0))
+        .ok()
+}
+
+/// 查找 backups 目录中最近一次数据库备份文件名（按修改时间倒序取最新；
+/// 修改时间相同时按文件名倒序，因为备份文件名 `db_backup_YYYYMMDD_HHMMSS` 自带时间戳）
+fn latest_db_backup_name(backup_dir: &Path) -> Option<String> {
+    let entries = fs::read_dir(backup_dir).ok()?;
+    let mut backups: Vec<(std::time::SystemTime, String)> = entries
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if !name.starts_with("db_backup_") || !name.ends_with(".db") {
+                return None;
+            }
+            let modified = entry.metadata().ok()?.modified().ok()?;
+            Some((modified, name))
+        })
+        .collect();
+    if backups.is_empty() {
+        return None;
+    }
+    backups.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| b.1.cmp(&a.1)));
+    Some(backups.into_iter().next().expect("non-empty").1)
+}
+
 /// 构建应用数据目录下的存储信息
 fn collect_storage_info() -> StorageInfo {
     let base_dir = get_app_config_dir();
     let mut items: Vec<StorageItem> = Vec::new();
 
     // 1) 数据库
-    {
+    let db_schema_version = {
         let db_path = base_dir.join("cc-switch.db");
         let mut item = StorageItem {
             path: db_path.to_string_lossy().to_string(),
@@ -170,9 +205,11 @@ fn collect_storage_info() -> StorageInfo {
             size_bytes: None,
             record_count: None,
             error: None,
+            schema_version: None,
         };
         if item.exists {
             item.size_bytes = file_size(&db_path);
+            item.schema_version = db_schema_version(&db_path);
             match db_table_row_counts(&db_path) {
                 Ok(rows) => {
                     item.record_count = Some(rows.iter().map(|(_, c)| *c).sum());
@@ -184,8 +221,10 @@ fn collect_storage_info() -> StorageInfo {
         } else {
             item.error = Some("数据库文件不存在".to_string());
         }
+        let schema_version = item.schema_version;
         items.push(item);
-    }
+        schema_version
+    };
 
     // 2) 固定条目：config.json / settings.json / backups / logs / skills / crash.log
     let fixed_entries: Vec<(String, String, String)> = vec![
@@ -228,6 +267,7 @@ fn collect_storage_info() -> StorageInfo {
             size_bytes: None,
             record_count: None,
             error: None,
+            schema_version: None,
         };
         if exists {
             if kind == "dir" {
@@ -272,6 +312,7 @@ fn collect_storage_info() -> StorageInfo {
                 size_bytes: None,
                 record_count: None,
                 error: None,
+                schema_version: None,
             };
             if is_dir {
                 let (size, count, err) = dir_size_and_count(&p);
@@ -288,11 +329,14 @@ fn collect_storage_info() -> StorageInfo {
     }
 
     let total_size_bytes = items.iter().map(|i| i.size_bytes.unwrap_or(0)).sum();
+    let latest_db_backup = latest_db_backup_name(&base_dir.join("backups"));
 
     StorageInfo {
         base_dir: base_dir.to_string_lossy().to_string(),
         total_size_bytes,
         items,
+        db_schema_version,
+        latest_db_backup,
     }
 }
 

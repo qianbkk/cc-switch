@@ -41,6 +41,20 @@ fn storage_info_reports_base_dir_and_db_entries() {
     );
     // record count must be a number, never raw contents
     assert!(db.error.is_none(), "healthy db should have no error");
+    // schema version should be reported from PRAGMA user_version
+    assert!(
+        db.schema_version.is_some_and(|v| v >= 19),
+        "db should report the current schema version, got {:?}",
+        db.schema_version
+    );
+    assert_eq!(
+        info.db_schema_version, db.schema_version,
+        "top-level schema version should mirror the db entry"
+    );
+    assert!(
+        info.latest_db_backup.is_none(),
+        "no backups exist yet, latest should be null"
+    );
 
     // fixed entries should be listed
     for name in ["config.json", "settings.json", "backups", "logs", "skills"] {
@@ -49,6 +63,41 @@ fn storage_info_reports_base_dir_and_db_entries() {
             "missing expected entry {name}"
         );
     }
+}
+
+#[test]
+fn storage_info_reports_latest_db_backup() {
+    let _guard = test_mutex().lock().expect("acquire test mutex");
+    reset_test_fs();
+    let home = ensure_test_home();
+    support::create_test_state().expect("create test state");
+    let backup_dir = home.join(".cc-switch").join("backups");
+    std::fs::create_dir_all(&backup_dir).expect("create backup dir");
+    std::fs::write(
+        backup_dir.join("db_backup_20260807_000000.db"),
+        b"fixture backup bytes",
+    )
+    .expect("write older backup");
+    std::fs::write(
+        backup_dir.join("db_backup_20260807_120000.db"),
+        b"fixture backup bytes",
+    )
+    .expect("write newer backup");
+
+    let info = collect();
+    assert_eq!(
+        info.latest_db_backup.as_deref(),
+        Some("db_backup_20260807_120000.db"),
+        "latest backup should pick the most recently modified file"
+    );
+    // Non-backup files in the folder must be ignored
+    std::fs::write(backup_dir.join("notes.txt"), b"not a backup").expect("write unrelated file");
+    let info = collect();
+    assert_eq!(
+        info.latest_db_backup.as_deref(),
+        Some("db_backup_20260807_120000.db"),
+        "unrelated files must not be treated as backups"
+    );
 }
 
 #[test]
