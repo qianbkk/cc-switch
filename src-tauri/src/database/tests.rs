@@ -395,6 +395,10 @@ fn schema_migration_rolls_back_schema_and_data_when_a_step_fails() {
          END;",
     )
     .expect("create migration failure trigger");
+    // create_tables_on_conn 建的是当前 v19 全表；模拟真实 v17 库结构：
+    // v19 才新增的 live_managed_state 必须不存在，迁移失败回滚后它也不该出现。
+    conn.execute("DROP TABLE live_managed_state", [])
+        .expect("drop v19-only table");
     Database::set_user_version(&conn, 17).expect("set rollback version");
 
     let error = Database::apply_schema_migrations_on_conn(&conn)
