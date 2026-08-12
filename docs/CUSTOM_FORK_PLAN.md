@@ -1,7 +1,8 @@
 # CC Switch 魔改版 — 总体规划与执行状态
 
 > 本文档记录魔改版的架构契约、已发布能力与后续维护状态；日常开发必须在独立分支验证后再合入 `main`。
-> 最近更新：2026-08-06（基于已发布 `m3.19.1-2` 复核实际代码、文档边界与首阶段 hardening）
+> **维护约束与工作流见 `docs/MAINTENANCE.md`（单一事实来源）**；本文聚焦架构契约与同步历史。
+> 最近更新：2026-08-12（Windows-only 精简、上游两批吸收 PR #7/#8 后复核）
 
 ---
 
@@ -419,3 +420,44 @@ jobs:
 - 完整 Vitest 套件会在打印 79/79、522/522 通过总结后保留进程句柄；App 单文件已能正常结束，且切换 threads/forks/singleFork 均不能消除，后续应按测试文件二分定位具体资源泄漏源。
 - 网关已有大量转换单测和路由冒烟测试，仍可进一步补真实 mock upstream 的跨协议非流式/SSE 端到端矩阵。
 - 前端主 chunk 约 4.28 MB（gzip 约 1.26 MB），后续可按设置页/会话页做代码分割，但不影响本轮正确性。
+
+---
+
+## 2026-08-12 上游同步记录（两批吸收 + Windows-only 精简）
+
+**背景**：上游 `farion1231/cc-switch` 相对本地 main 有 43 个新提交（199 文件、+13069/-12252 行），经评估后**选择性吸收 35 个**、排除 8 个（5 个赞助商推广 996d512f/4d3e2c35/0e604b75/5b697abc/290b65c0、2 个发布 425e932b/43eaf073、1 个 WSL CI ceef0a52）。
+
+**第一批（PR #7，merge `979f3787`）** — 8 个提交边界：
+| 本地提交 | 上游来源 | 内容 |
+|---|---|---|
+| `b67f5308` | 3c592d93 | WiX registry key 反斜杠转义（MSI 安装器） |
+| `fa962e52` | f38722a4 | Qwen3.8 Max 内置定价 |
+| `5249ea7d` | 413c09e0 | 生成 catalog 时尊重用户自有 model_catalog_json（安全） |
+| `1a6e05d4` | 968794e3 | 空闲 GPU 优化（窗口活动检测 windowActivity.ts） |
+| `65b4f77c` | c0050623 | checkbox 样式统一 |
+| `95c050b5` | 7e152d75 | 模型映射下拉模糊搜索 |
+| `d213a5cc` | 076c2744 | 模型下拉整合收尾（OpenClaw/OMO 表单共用 ModelDropdown） |
+| `300c7d18` | c98cc3a9 | CI 按改动区域跳过（适配 Windows-only ci.yml） |
+
+**第二批（PR #8，merge `23d9517d`）** — 23 个上游提交归并 10 个提交边界：
+| 本地提交 | 上游来源 | 内容 |
+|---|---|---|
+| `2015238a` | eb356e15+40b6376b+967daa1a | skills 修复（SKILL.md anchor、readme_url、SSOT 缺失报告） |
+| `b949eed7` | 9f19d8fd+0cb6e014 | 管理页可搜索列表+批量开关（含 DAO 重构、16 测试）；头部操作常显 |
+| `5dd76f9e` | 59a2bd10+baf07a27 | usage：Codex 交错计数修复、session 批量插入 |
+| `298e5d10` | 0345fad6+92ca95ff+c39c9032+95b95da6+5b77da2b | **OpenClaw/OMO**：统一 OMO 配置+运行时模型加载+表单对齐+WSL atomic-replace 回退 |
+| `9e8153fe` | 3711e1a0+390102a2+16cc0d7f+bef46cd5 | PPIO 供应商、DeepSeek contextWindow、OpenCode Go 路由 |
+| `89c090e4` | 7de63227+bc7f5f41+8673e9d8+619a592c | 表单打磨（毛玻璃容器、空白收窄、Claude 高级选项对齐） |
+| `e29e42ce` | 492245dc | Codex OAuth 每账号用量展示 |
+| `4598daa3` | 83830767 | Hermes 改用 SOUL.md |
+| `3705b45c` | 36ed280d | labeler i18n glob 修复 |
+| `a3ad6721` | — | i18n 文案汇总同步 |
+
+**Windows-only 精简（PR #6，merge `56b0327b`）**：
+- ci.yml：backend 矩阵只留 windows-latest；frontend 保留 ubuntu runner。
+- release.yml：发布矩阵只留 windows-2022 x64；删 macOS 构建/公证/签名、Linux 构建、ARM64 LLVM 处理。
+- tauri.conf.json：`bundle.targets` 收窄为 `["msi","nsis"]`，删 macOS 段。
+- generate-download-manifest.mjs：下载规则只留 Windows。
+- 图标/Info.plist 等 macOS 资源因沙箱限制保留（无害冗余）；Rust `cfg(target_os)` 保留（库依赖必需）。
+
+**验证**：两批 PR 的 5 项 CI（含 Detect changed areas 门控）全绿后合并；本地 main 同步到 `23d9517d`。

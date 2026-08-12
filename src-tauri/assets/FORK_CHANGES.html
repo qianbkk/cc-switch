@@ -362,37 +362,38 @@
 
       <div class="stats">
         <div class="stat">
-          <div class="num">41</div>
-          <div class="cap">Fork 独有提交<br />（其中 38 个非合并提交）</div>
+          <div class="num">86</div>
+          <div class="cap">Fork 独有提交<br />（其中 75 个非合并提交）</div>
         </div>
         <div class="stat">
-          <div class="num">87</div>
-          <div class="cap">相对发布基线<br />有差异的文件</div>
+          <div class="num">112</div>
+          <div class="cap">相对当前上游<br />有差异的文件</div>
         </div>
         <div class="stat">
-          <div class="num good">+8934</div>
+          <div class="num good">+10645</div>
           <div class="cap">新增代码行</div>
         </div>
         <div class="stat">
-          <div class="num warn">−840</div>
-          <div class="cap">删除代码行<br />（含文档与上游同步调整）</div>
+          <div class="num warn">−2781</div>
+          <div class="cap">删除代码行<br />（含 Windows-only 精简与文档调整）</div>
         </div>
       </div>
 
       <div class="card">
         <p>
-          <b>这些数字怎么读：</b>87 个文件与代码行统计包含新增功能、上游同步后的
-          适配、测试、文档和发布脚本，不等于“改坏了 87 个上游模块”。Fork 仍以新增
+          <b>这些数字怎么读：</b>112 个文件与代码行统计包含新增功能、上游同步后的
+          适配、测试、文档和发布脚本，不等于“改坏了 112 个上游模块”。Fork 仍以新增
           独立模块为主，但确实修改了代理、数据库、设置页和应用初始化等共享枢纽，
           因此同步新上游时必须跑完整回归，不能再笼统宣称“原版代码一行没动”。
         </p>
         <p class="muted small">
-          这组数字描述的是发布快照，不作为功能是否正确的证明；功能边界以本页说明、
+          这组数字描述的是当前快照，不作为功能是否正确的证明；功能边界以本页说明、
           自动化测试和实际代码调用链为准。
         </p>
         <p class="muted small">
-          <b>统计口径：</b>以上数字固定对应发布标签 <code>m3.19.1-2</code>，
-          对比其上游合并基线 <code>ebbf141f</code>。上游后续提交不会倒改这组发布快照数字。
+          <b>统计口径：</b>以上数字对应当前 <code>main</code>（2026-08-12），
+          对比当前上游 <code>upstream/main</code>。上游继续前进后数字会变化，
+          维护时以 Git 现场数据为准，必要时同步刷新本页。
         </p>
       </div>
 
@@ -847,6 +848,19 @@
           </td>
         </tr>
         <tr>
+          <td><span class="label tag-warn">仅 Windows</span></td>
+          <td>
+            构建与 CI 矩阵<b>仅保留 Windows</b>（2026-08-12 起）<br />
+            <code>bundle.targets</code> 收窄为 msi/nsis<br />
+            发布产物只出 Windows Portable / MSI
+          </td>
+          <td>
+            <b>魔改版以自用为主，舍弃 macOS/Linux 平台支持。</b
+            >Rust <code>cfg(target_os)</code> 条件编译为 tauri 库依赖所需而保留；
+            图标/plist 等 macOS 资源属无害冗余未清理。上游仍是全平台，不影响它。
+          </td>
+        </tr>
+        <tr>
           <td><span class="label tag-warn">仅隐藏</span></td>
           <td>WebDAV / S3 云同步的设置入口</td>
           <td>
@@ -931,6 +945,40 @@
             同期还加入 Fork 预发行版更新检查、网关启动失败状态回滚和测试稳定性修正。<br />
             <b>发布快照：</b>41 个 Fork 独有提交（38 个非合并提交），87 个差异文件，
             <code>+8934/-840</code>。当前上游会继续前进，维护时应以 Git 现场数据为准。
+          </div>
+        </div>
+
+        <div class="tl-item">
+          <div class="tl-date">2026-08-07</div>
+          <div class="tl-title">安全加固批次（PR #3）+ Live 保护接入</div>
+          <div class="tl-body">
+            Live 配置保护接入全部覆盖性写盘入口（<code>fix/live-protection-phase2</code>）；
+            吸收自制安全补丁系列（skill 压缩包路径穿越、凭据泄漏防护、SQL 导入跨文件限制、
+            深链导入风险提示与禁用 usage script、终端路径转义修复）。数据库结构保持 v18。
+          </div>
+        </div>
+
+        <div class="tl-item">
+          <div class="tl-date">2026-08-11</div>
+          <div class="tl-title">数据库加固 + 死锁修复（PR #4）</div>
+          <div class="tl-body">
+            迁移前强制版本门禁与备份、失败即中止；吸收上游批量 dump/事务化 restore。
+            CI 三平台曾因三方合并把 sync_import 测试融合成两版混合体，
+            <b>同线程二次 lock 不可重入 Mutex 导致确定性挂起</b>，
+            用 CI 插桩定位后修复（复用顶层 conn，删除二次锁）。
+          </div>
+        </div>
+
+        <div class="tl-item up">
+          <div class="tl-date">2026-08-12</div>
+          <div class="tl-title">Windows-only 精简 + 上游两批吸收（PR #6/#7/#8）</div>
+          <div class="tl-body">
+            自用为主，<b>正式舍弃 macOS/Linux</b>：CI 从 6 项减为 4 项、发布矩阵只留
+            Windows、下载清单收窄。同时选择性吸收上游 43 个新提交中的 35 个：
+            WiX 转义、模型下拉模糊搜索、空闲 GPU 优化、checkbox 统一、catalog 安全、
+            管理页可搜索列表 + 批量开关、OpenClaw/OMO 统一配置、usage 交错计数、
+            skills 修复系列、PPIO 供应商等；排除赞助商/发布/WSL CI 8 个。
+            CI 新增「按改动区域跳过」门控。
           </div>
         </div>
       </div>
