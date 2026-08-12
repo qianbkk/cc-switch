@@ -11,10 +11,54 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Detect changed areas
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+      backend: ${{ steps.filter.outputs.backend }}
+    steps:
+      # On pull_request the filter reads changed files via the API (no checkout);
+      # on push it needs a local git history to diff against.
+      - name: Checkout
+        if: github.event_name == 'push'
+        uses: actions/checkout@v6
+
+      - name: Detect changed paths
+        id: filter
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          filters: |
+            frontend:
+              - "src/**"
+              - "tests/**"
+              - "index.html"
+              - "package.json"
+              - "pnpm-lock.yaml"
+              - "pnpm-workspace.yaml"
+              - "tsconfig.json"
+              - "tsconfig.node.json"
+              - "vite.config.ts"
+              - "vitest.config.ts"
+              - "tailwind.config.cjs"
+              - "postcss.config.cjs"
+              - "components.json"
+              - ".github/workflows/**"
+            backend:
+              - "src-tauri/**"
+              - "rust-toolchain.toml"
+              - ".github/workflows/**"
+
   frontend:
     name: Frontend Checks
     # 前端检查与平台无关，保留 ubuntu runner（更快更便宜）
     runs-on: ubuntu-latest
+    needs: changes
+    # Pushes to main always run everything: they keep the caches that PRs restore from warm.
+    if: github.event_name != 'pull_request' || needs.changes.outputs.frontend == 'true'
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -65,6 +109,9 @@ jobs:
     name: Backend Checks (windows)
     # 魔改版仅维护 Windows 平台，不再跑 macOS/Linux 后端检查
     runs-on: windows-latest
+    needs: changes
+    # Pushes to main always run everything: they keep the caches that PRs restore from warm.
+    if: github.event_name != 'pull_request' || needs.changes.outputs.backend == 'true'
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -103,6 +150,9 @@ jobs:
     # custom-protocol），并校验发布 exe 确实嵌入了 dist 前端资源。若资源缺失
     # （dev 模式产物、会连 localhost:3000），CI 立即失败，禁止发布错误包。
     runs-on: windows-latest
+    needs: changes
+    # Rust/tauri 构建属于 backend 区域，纯前端改动时跳过（保持与 backend 一致的门控）
+    if: github.event_name != 'pull_request' || needs.changes.outputs.backend == 'true'
     steps:
       - name: Checkout
         uses: actions/checkout@v6
