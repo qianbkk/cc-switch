@@ -3,6 +3,7 @@
 //! 负责将请求转发到上游Provider，支持故障转移
 
 use super::hyper_client::{ProxyResponse, MAX_RESPONSE_BODY_BYTES};
+use super::limits::MAX_DECOMPRESSED_BODY_BYTES;
 use super::{
     body_filter::filter_private_params_with_whitelist,
     content_encoding::{decompress_body_with_limit, get_content_encoding},
@@ -2320,7 +2321,7 @@ impl RequestForwarder {
             let raw = response.bytes_with_limit(MAX_RESPONSE_BODY_BYTES).await?;
             let decoded = match encoding {
                 Some(encoding) => {
-                    match decompress_body_with_limit(&encoding, &raw, MAX_RESPONSE_BODY_BYTES) {
+                    match decompress_body_with_limit(&encoding, &raw, MAX_DECOMPRESSED_BODY_BYTES) {
                         Ok(Some(decompressed)) => decompressed,
                         // 不支持的编码 / 解压失败 / 解压后超限：退回（已有上限的）
                         // 原始字节，尽量保留可读信息
@@ -2386,7 +2387,7 @@ impl RequestForwarder {
         let raw = response.bytes_with_limit(MAX_RESPONSE_BODY_BYTES).await?;
         let decoded = match encoding {
             Some(encoding) => {
-                match decompress_body_with_limit(&encoding, &raw, MAX_RESPONSE_BODY_BYTES) {
+                match decompress_body_with_limit(&encoding, &raw, MAX_DECOMPRESSED_BODY_BYTES) {
                     Ok(Some(decompressed)) => decompressed,
                     _ => raw.to_vec(),
                 }
@@ -2413,7 +2414,7 @@ impl RequestForwarder {
         let raw = response.bytes_with_limit(MAX_RESPONSE_BODY_BYTES).await?;
         let decoded = match encoding {
             Some(encoding) => {
-                match decompress_body_with_limit(&encoding, &raw, MAX_RESPONSE_BODY_BYTES) {
+                match decompress_body_with_limit(&encoding, &raw, MAX_DECOMPRESSED_BODY_BYTES) {
                     Ok(Some(decompressed)) => decompressed,
                     _ => raw.to_vec(),
                 }

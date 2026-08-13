@@ -378,8 +378,8 @@ impl ProxyServer {
                 post(gateway::handle_gateway_responses),
             )
             .route("/gateway/v1/models", get(gateway::handle_gateway_models))
-            // 提高默认请求体大小限制（避免 413 Payload Too Large）
-            .layer(DefaultBodyLimit::max(200 * 1024 * 1024))
+            // 请求体大小限制统一走集中常量（避免魔法数字漂移）
+            .layer(DefaultBodyLimit::max(super::limits::MAX_REQUEST_BODY_BYTES))
             .with_state(self.state.clone())
     }
 

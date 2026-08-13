@@ -49,6 +49,12 @@ pub fn map_proxy_error_to_status(error: &ProxyError) -> u16 {
         // 配置错误/无效请求：400 Bad Request
         ProxyError::ConfigError(_) | ProxyError::InvalidRequest(_) => 400,
 
+        // 请求体超限：413 Payload Too Large
+        ProxyError::RequestBodyTooLarge(_) => 413,
+
+        // 响应体超限：502 Bad Gateway（上游返回了异常大的 body）
+        ProxyError::ResponseBodyTooLarge(_) => 502,
+
         // 认证错误：401 Unauthorized
         ProxyError::AuthError(_) => 401,
 
