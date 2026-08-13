@@ -107,10 +107,12 @@ jobs:
 
       # 魔改详情生成物校验（第 20 项）：运行生成器，若与已提交的
       # FORK_CHANGES.html 不一致则 CI 失败——强制提交前更新生成物，
-      # 杜绝页面数字/描述过期。
+      # 杜绝页面数字/描述过期。PR 场景 checkout 是 merge ref（无 main
+      # 分支），fetch origin/main 建 ref 并传 --head 保持与本地口径一致。
       - name: Check fork changes freshness
         run: |
-          node scripts/generate-fork-changes.mjs
+          git fetch origin main
+          node scripts/generate-fork-changes.mjs --head origin/main
           git diff --exit-code -- src-tauri/assets/FORK_CHANGES.html
 
       - name: TypeScript type check

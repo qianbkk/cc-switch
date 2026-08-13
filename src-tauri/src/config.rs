@@ -216,8 +216,7 @@ pub fn get_app_config_dir() -> PathBuf {
         // 测试隔离（CC_SWITCH_TEST_HOME 已设置）时跳过回退：tempdir 下没有
         // 落盘数据库，而 MSYS/bash 的 HOME 指向真实用户目录，回退会让测试
         // 读写用户真实配置（曾导致 model_pricing 测试污染真实文件）。
-        let test_isolation =
-            std::env::var_os("CC_SWITCH_TEST_HOME").is_some_and(|v| !v.is_empty());
+        let test_isolation = std::env::var_os("CC_SWITCH_TEST_HOME").is_some_and(|v| !v.is_empty());
         if !test_isolation {
             let default_db = default_dir.join("cc-switch.db");
             if !default_db.exists() {
