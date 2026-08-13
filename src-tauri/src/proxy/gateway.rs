@@ -35,6 +35,7 @@
 use super::{
     forwarder::RequestForwarder,
     hyper_client::{ProxyResponse, MAX_RESPONSE_BODY_BYTES},
+    limits::{MAX_REQUEST_BODY_BYTES, MAX_SSE_EVENT_BYTES},
     providers::{
         streaming, streaming_anthropic_chat, streaming_codex_anthropic, streaming_gemini,
         streaming_responses, transform, transform_responses,
@@ -57,7 +58,6 @@ use axum::{
 use bytes::Bytes;
 use futures::StreamExt;
 use http::Extensions;
-use http_body_util::BodyExt;
 use serde_json::{json, Value};
 use std::str::FromStr;
 
@@ -248,12 +248,20 @@ fn load_provider(
 // 转发构造
 // =====================================================================
 
-/// 构建单 provider 候选的 `RequestForwarder`（与「failover 关闭 +
-/// max_retries=0」语义一致：网关只尝试一家、不启用超时与熔断探测）
-fn build_forwarder(state: &ProxyState, provider: &Provider) -> RequestForwarder {
+/// 构建单 provider 候选的 `RequestForwarder`。
+///
+/// 语义（路线图第 13 项）：
+/// - 保持「单别名只路由一个供应商」：`max_retries=0`，不悄悄故障转移。
+/// - 超时不再全部禁用：非流式 / 首字节 / 流空闲超时读取网关配置
+///   （`GatewayConfig::*_timeout_secs`，默认 600/60/120），0 仍表示禁用。
+fn build_forwarder(
+    state: &ProxyState,
+    provider: &Provider,
+    cfg: &GatewayConfig,
+) -> RequestForwarder {
     RequestForwarder::new(
         state.provider_router.clone(),
-        0, // non_streaming_timeout (disabled)
+        cfg.non_streaming_timeout_secs,
         state.status.clone(),
         state.current_providers.clone(),
         state.gemini_shadow.clone(),
@@ -263,8 +271,8 @@ fn build_forwarder(state: &ProxyState, provider: &Provider) -> RequestForwarder 
         provider.id.clone(),
         String::new(), // session_id (unused for gateway)
         false,         // session_client_provided
-        0,             // streaming_first_byte_timeout (disabled)
-        0,             // streaming_idle_timeout (disabled)
+        cfg.streaming_first_byte_timeout_secs,
+        cfg.streaming_idle_timeout_secs,
         RectifierConfig::default(),
         OptimizerConfig::default(),
         CopilotOptimizerConfig::default(),
@@ -273,6 +281,7 @@ fn build_forwarder(state: &ProxyState, provider: &Provider) -> RequestForwarder 
 }
 
 /// 实际发起单 provider 转发
+#[allow(clippy::too_many_arguments)] // 与 forwarder::forward_with_retry_inner 一致：参数为转发所需上下文
 async fn forward_with_single_provider(
     state: &ProxyState,
     provider: Provider,
@@ -281,6 +290,7 @@ async fn forward_with_single_provider(
     body: Value,
     headers: HeaderMap,
     extensions: Extensions,
+    cfg: &GatewayConfig,
 ) -> Result<
     (
         ProxyResponse,
@@ -293,7 +303,7 @@ async fn forward_with_single_provider(
         .get("stream")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
-    let forwarder = build_forwarder(state, &provider);
+    let forwarder = build_forwarder(state, &provider, cfg);
     let result = forwarder
         .forward_with_retry(
             &app_type,
@@ -321,28 +331,38 @@ async fn proxy_response_to_axum(
     inbound: InboundProtocol,
     upstream_format: Option<String>,
     is_streaming: bool,
+    streaming_idle_timeout_secs: u64,
 ) -> Response {
     let status = resp.status();
     let headers = resp.headers().clone();
 
     if is_streaming {
         // 流式路径：直接拿 stream，构造链式 SSE 转换。
-        let upstream_stream = resp.bytes_stream().map(|item| match item {
-            Ok(b) => Ok::<Bytes, std::io::Error>(b),
-            Err(e) => Err(e),
-        });
-        let body_stream = match build_inbound_sse_stream(
-            Box::pin(upstream_stream),
-            upstream_format.as_deref(),
-            inbound,
-        ) {
-            Ok(s) => s,
-            Err(e) => {
-                log::warn!("[Gateway] SSE 转换失败，透传上游: {e}");
-                // 重新拿 stream（已经在上面 move 走；只能返回错误）
-                return error_to_response(ProxyError::Internal(format!("SSE transform: {e}")));
-            }
+        // 先加单事件大小守卫（在原始上游字节流上逐事件检查），
+        // 防止超大单事件撑爆下游转换器内存。
+        let guarded_stream = limit_sse_event_size(
+            Box::pin(resp.bytes_stream().map(|item| match item {
+                Ok(b) => Ok::<Bytes, std::io::Error>(b),
+                Err(e) => Err(e),
+            })),
+            MAX_SSE_EVENT_BYTES,
+        );
+        // 再加流空闲超时守卫：两个数据块之间的最大间隔超过配置值即终止流，
+        // 防止上游卡死导致连接无限挂起（0 = 禁用）。
+        let guarded_stream = if streaming_idle_timeout_secs > 0 {
+            limit_sse_idle_timeout(guarded_stream, streaming_idle_timeout_secs)
+        } else {
+            guarded_stream
         };
+        let body_stream =
+            match build_inbound_sse_stream(guarded_stream, upstream_format.as_deref(), inbound) {
+                Ok(s) => s,
+                Err(e) => {
+                    log::warn!("[Gateway] SSE 转换失败，透传上游: {e}");
+                    // 重新拿 stream（已经在上面 move 走；只能返回错误）
+                    return error_to_response(ProxyError::Internal(format!("SSE transform: {e}")));
+                }
+            };
         let mut response_builder = Response::builder().status(status);
         for (name, value) in headers.iter() {
             if matches!(
@@ -481,6 +501,138 @@ fn convert_response_body(
 type SseStream =
     std::pin::Pin<Box<dyn futures::Stream<Item = Result<Bytes, std::io::Error>> + Send>>;
 
+/// 受限读取请求体：逐块累积，超过 `max_bytes` 立即返回 413（而非无限收集）。
+async fn collect_body_with_limit(
+    body: axum::body::Body,
+    max_bytes: usize,
+) -> Result<Bytes, ProxyError> {
+    use bytes::BytesMut;
+    let mut stream = body.into_data_stream();
+    let mut buf = BytesMut::new();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| ProxyError::Internal(format!("read body: {e}")))?;
+        if buf.len() + chunk.len() > max_bytes {
+            return Err(ProxyError::RequestBodyTooLarge(buf.len() + chunk.len()));
+        }
+        buf.extend_from_slice(&chunk);
+    }
+    Ok(buf.freeze())
+}
+
+/// 流式单事件大小守卫：在原始上游 SSE 字节流上逐事件检查。
+///
+/// 事件边界为 `\n\n` 或 `\r\n\r\n`（SSE 通用分隔符）。单个事件（不含分隔符）
+/// 超过 `max_event_bytes` 立即终止流并报错，防止异常/恶意上游发送超大单事件
+/// 撑爆下游转换器内存。事件按原样透传（chunk 边界可能被重组，SSE 语义不变）。
+fn limit_sse_event_size(upstream: SseStream, max_event_bytes: usize) -> SseStream {
+    Box::pin(async_stream::stream! {
+        let mut pending: Vec<u8> = Vec::new();
+        let mut stream = upstream;
+        while let Some(item) = stream.next().await {
+            match item {
+                Ok(bytes) => {
+                    pending.extend_from_slice(&bytes);
+                    loop {
+                        match find_sse_event_delimiter(&pending) {
+                            Some((event_len, delim_len)) => {
+                                if event_len > max_event_bytes {
+                                    log::warn!(
+                                        "[Gateway] SSE 单事件超限（{event_len} > {max_event_bytes} 字节），终止流"
+                                    );
+                                    yield Err(std::io::Error::other(format!(
+                                        "SSE event exceeds {max_event_bytes} bytes"
+                                    )));
+                                    return;
+                                }
+                                let complete_len = event_len + delim_len;
+                                let complete: Vec<u8> = pending.drain(..complete_len).collect();
+                                yield Ok(Bytes::from(complete));
+                            }
+                            None => {
+                                // 无完整事件；若累积已超限（单个无界事件），提前报错
+                                if pending.len() > max_event_bytes {
+                                    log::warn!(
+                                        "[Gateway] SSE 单事件无边界且累积超限（{} > {max_event_bytes} 字节），终止流",
+                                        pending.len()
+                                    );
+                                    yield Err(std::io::Error::other(format!(
+                                        "SSE event exceeds {max_event_bytes} bytes"
+                                    )));
+                                    return;
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    yield Err(e);
+                    return;
+                }
+            }
+        }
+        // 流正常结束：尾部未完成事件（无分隔符）直接丢弃，不转发。
+    })
+}
+
+/// 在字节 buffer 中找最早的 SSE 事件分隔符（`\n\n` 或 `\r\n\r\n`）。
+/// 返回 `(事件起始处到分隔符的距离 = 事件体长度, 分隔符字节数)`。
+fn find_sse_event_delimiter(buf: &[u8]) -> Option<(usize, usize)> {
+    let mut best: Option<(usize, usize)> = None;
+    for (needle, len) in [
+        (b"\r\n\r\n".as_slice(), 4usize),
+        (b"\n\n".as_slice(), 2usize),
+    ] {
+        if let Some(pos) = buf.windows(needle.len()).position(|w| w == needle) {
+            let cand = (pos, len);
+            if best.is_none_or(|(best_pos, _)| pos < best_pos) {
+                best = Some(cand);
+            }
+        }
+    }
+    best
+}
+
+/// 流空闲超时守卫：包装 SSE 字节流，两个数据块之间的间隔超过 `idle_secs`
+/// 立即终止流并报错（504 语义），防止上游卡死导致连接无限挂起。
+///
+/// 注意：只对「块间间隔」计时，不限制总时长——长流式补全（如长文档生成）
+/// 只要持续有数据就正常通过。`idle_secs = 0` 应在外层过滤，不调用本函数。
+fn limit_sse_idle_timeout(upstream: SseStream, idle_secs: u64) -> SseStream {
+    Box::pin(async_stream::stream! {
+        let mut stream = upstream;
+        loop {
+            let next = tokio::time::timeout(
+                std::time::Duration::from_secs(idle_secs),
+                stream.next(),
+            )
+            .await;
+            match next {
+                Ok(Some(item)) => match item {
+                    Ok(bytes) => yield Ok(bytes),
+                    Err(e) => {
+                        yield Err(e);
+                        return;
+                    }
+                },
+                Ok(None) => {
+                    // 上游流正常结束
+                    return;
+                }
+                Err(_elapsed) => {
+                    log::warn!(
+                        "[Gateway] 流式响应空闲超时（{idle_secs}s 无数据），终止流"
+                    );
+                    yield Err(std::io::Error::other(format!(
+                        "streaming idle timeout after {idle_secs}s without data"
+                    )));
+                    return;
+                }
+            }
+        }
+    })
+}
+
 /// SSE 链式构造：上游 → Anthropic SSE → 入站 SSE
 fn build_inbound_sse_stream(
     upstream: SseStream,
@@ -600,10 +752,10 @@ async fn process_gateway_request(
     let headers = parts.headers;
     let extensions = parts.extensions;
 
-    let body_bytes = match req_body.collect().await {
-        Ok(b) => b.to_bytes(),
+    let body_bytes = match collect_body_with_limit(req_body, MAX_REQUEST_BODY_BYTES).await {
+        Ok(b) => b,
         Err(e) => {
-            return error_to_response(ProxyError::Internal(format!("read body: {e}")));
+            return error_to_response(e);
         }
     };
     let mut body: Value = match serde_json::from_slice(&body_bytes) {
@@ -671,12 +823,19 @@ async fn process_gateway_request(
         .unwrap_or(false);
 
     match forward_with_single_provider(
-        &state, provider, app_type, endpoint, body, headers, extensions,
+        &state, provider, app_type, endpoint, body, headers, extensions, &cfg,
     )
     .await
     {
         Ok((resp, upstream_format, _is_streaming_request)) => {
-            proxy_response_to_axum(resp, inbound, upstream_format, is_streaming).await
+            proxy_response_to_axum(
+                resp,
+                inbound,
+                upstream_format,
+                is_streaming,
+                cfg.streaming_idle_timeout_secs,
+            )
+            .await
         }
         Err(e) => error_to_response(e),
     }
@@ -688,6 +847,7 @@ async fn process_gateway_request(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::database::Database;
     use crate::proxy::server::ProxyServer;
     use crate::proxy::types::ProxyConfig;
@@ -813,5 +973,238 @@ mod tests {
             .unwrap();
         let resp = router.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), http::StatusCode::OK);
+    }
+
+    // ------------------------------------------------------------------
+    // 大小限制（路线图 12）
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn sse_event_delimiter_finds_lf_and_crlf() {
+        // \n\n 分隔
+        assert_eq!(
+            find_sse_event_delimiter(b"data: {\"a\":1}\n\nrest"),
+            Some((13, 2)) // "data: {\"a\":1}" 是 13 字节
+        );
+        // \r\n\r\n 分隔："data: x" 是 7 字节，\r 从第 7 位开始（分隔符 4 字节）
+        assert_eq!(
+            find_sse_event_delimiter(b"data: x\r\n\r\nrest"),
+            Some((7, 4))
+        );
+        // 无分隔符
+        assert_eq!(find_sse_event_delimiter(b"data: incomplete"), None);
+        // 空 buffer
+        assert_eq!(find_sse_event_delimiter(b""), None);
+    }
+
+    #[test]
+    fn sse_event_delimiter_prefers_earliest_position() {
+        // \r\n\r\n 在 \n\n 之前出现时应取更早的
+        let buf = b"a\r\n\r\nb\n\nc";
+        assert_eq!(find_sse_event_delimiter(buf), Some((1, 4)));
+    }
+
+    #[tokio::test]
+    async fn limit_sse_event_size_passes_normal_events_through() {
+        use bytes::Bytes;
+        use futures::stream;
+        use futures::StreamExt as _;
+
+        let input: SseStream = Box::pin(stream::iter(vec![
+            Ok::<Bytes, std::io::Error>(Bytes::from("event: message_start\ndata: {\"t\":1}\n\n")),
+            Ok(Bytes::from("event: message_delta\ndata: {\"t\":2}\n\n")),
+            Ok(Bytes::from("event: message_stop\ndata: {}\n\n")),
+        ]));
+        let mut out = limit_sse_event_size(input, 1024);
+        let mut collected = String::new();
+        while let Some(item) = out.next().await {
+            collected.push_str(&String::from_utf8_lossy(&item.unwrap()));
+        }
+        assert_eq!(collected.matches("\n\n").count(), 3);
+        assert!(collected.contains("\"t\":1"));
+        assert!(collected.contains("\"t\":2"));
+    }
+
+    #[tokio::test]
+    async fn limit_sse_event_size_rejects_oversized_single_event() {
+        use bytes::Bytes;
+        use futures::stream;
+        use futures::StreamExt as _;
+
+        // 单个事件 2KB，上限 1KB → 流报错终止
+        let big_data = "x".repeat(2048);
+        let input: SseStream = Box::pin(stream::iter(vec![Ok::<Bytes, std::io::Error>(
+            Bytes::from(format!("data: {big_data}\n\n")),
+        )]));
+        let mut out = limit_sse_event_size(input, 1024);
+        let first = out.next().await;
+        assert!(first.is_some(), "应产生一个错误 item");
+        assert!(first.unwrap().is_err(), "超限事件应报错");
+        assert!(
+            out.next().await.is_none(),
+            "报错后流应终止（不产生更多 item）"
+        );
+    }
+
+    #[tokio::test]
+    async fn limit_sse_event_size_rejects_boundless_accumulation() {
+        use bytes::Bytes;
+        use futures::stream;
+        use futures::StreamExt as _;
+
+        // 事件无分隔符且持续累积超过上限 → 提前终止
+        let chunks: Vec<Bytes> = vec![
+            Bytes::from("data: chunk1\n"),
+            Bytes::from("data: chunk2\n"),
+            Bytes::from("data: chunk3\n"),
+        ];
+        let input: SseStream = Box::pin(stream::iter(
+            chunks.into_iter().map(Ok::<Bytes, std::io::Error>),
+        ));
+        let mut out = limit_sse_event_size(input, 30);
+        let mut err_seen = false;
+        while let Some(item) = out.next().await {
+            if item.is_err() {
+                err_seen = true;
+                break;
+            }
+        }
+        assert!(err_seen, "无边界累积超过上限应报错");
+    }
+
+    #[tokio::test]
+    async fn limit_sse_event_size_allows_event_at_exact_boundary() {
+        use bytes::Bytes;
+        use futures::stream;
+        use futures::StreamExt as _;
+
+        // 事件体恰好 10 字节（含分隔符 12），上限 10 → 允许
+        let input: SseStream = Box::pin(stream::iter(vec![Ok::<Bytes, std::io::Error>(
+            Bytes::from("0123456789\n\n"),
+        )]));
+        let mut out = limit_sse_event_size(input, 10);
+        let item = out.next().await.unwrap();
+        assert!(item.is_ok(), "等于上限的事件应放行");
+        assert_eq!(item.unwrap(), Bytes::from("0123456789\n\n"));
+    }
+
+    #[tokio::test]
+    async fn collect_body_with_limit_rejects_oversized_body() {
+        use axum::body::Body;
+        let big = vec![0u8; 4096];
+        let body = Body::from(big);
+        let result = collect_body_with_limit(body, 1024).await;
+        assert!(
+            matches!(result, Err(ProxyError::RequestBodyTooLarge(_))),
+            "超过上限应返回 RequestBodyTooLarge, got: {result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn collect_body_with_limit_accepts_body_under_limit() {
+        use axum::body::Body;
+        let small = b"{\"model\":\"m\"}".to_vec();
+        let body = Body::from(small.clone());
+        let result = collect_body_with_limit(body, 1024).await;
+        assert!(result.is_ok(), "低于上限应成功, got: {result:?}");
+        assert_eq!(result.unwrap(), Bytes::from(small));
+    }
+
+    #[test]
+    fn limits_constants_are_reasonable() {
+        // 常量值 sanity check：防止意外改小/改大导致行为漂移
+        assert!(crate::proxy::limits::MAX_REQUEST_BODY_BYTES >= 100 * 1024 * 1024);
+        assert!(crate::proxy::limits::MAX_RESPONSE_BODY_BYTES >= 100 * 1024 * 1024);
+        assert_eq!(
+            crate::proxy::limits::MAX_DECOMPRESSED_BODY_BYTES,
+            crate::proxy::limits::MAX_RESPONSE_BODY_BYTES
+        );
+        assert!(crate::proxy::limits::MAX_SSE_EVENT_BYTES >= 4 * 1024 * 1024);
+        // 流式单事件上限应远小于响应体上限（事件是细粒度单元）
+        assert!(
+            crate::proxy::limits::MAX_SSE_EVENT_BYTES
+                < crate::proxy::limits::MAX_RESPONSE_BODY_BYTES
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // 超时 / 重试语义（路线图 13）
+    // ------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn idle_timeout_guard_terminates_silent_stream() {
+        use futures::stream;
+        use futures::StreamExt as _;
+
+        // 用一个「永不产出数据」的 pending stream 模拟上游卡死
+        let input: SseStream = Box::pin(stream::pending::<Result<Bytes, std::io::Error>>());
+        let mut out = limit_sse_idle_timeout(input, 1); // 1s 空闲超时
+        let first = tokio::time::timeout(std::time::Duration::from_secs(5), out.next()).await;
+        assert!(first.is_ok(), "超时后应产生终止 item");
+        assert!(
+            first.unwrap().unwrap().is_err(),
+            "空闲超时应报错终止（而非无限挂起）"
+        );
+    }
+
+    #[tokio::test]
+    async fn idle_timeout_guard_passes_active_stream() {
+        use bytes::Bytes;
+        use futures::stream;
+        use futures::StreamExt as _;
+
+        // 持续有数据的流（间隔远小于超时）应全部通过
+        let input: SseStream = Box::pin(stream::iter(vec![
+            Ok::<Bytes, std::io::Error>(Bytes::from("data: a\n\n")),
+            Ok(Bytes::from("data: b\n\n")),
+        ]));
+        let mut out = limit_sse_idle_timeout(input, 60);
+        let mut collected = Vec::new();
+        while let Some(item) = out.next().await {
+            collected.push(item.unwrap());
+        }
+        assert_eq!(collected.len(), 2);
+        assert_eq!(collected[0], Bytes::from("data: a\n\n"));
+        assert_eq!(collected[1], Bytes::from("data: b\n\n"));
+    }
+
+    #[tokio::test]
+    async fn idle_timeout_guard_ends_normally_on_upstream_close() {
+        use futures::stream;
+        use futures::StreamExt as _;
+
+        let input: SseStream = Box::pin(stream::iter(Vec::<Result<Bytes, std::io::Error>>::new()));
+        let mut out = limit_sse_idle_timeout(input, 60);
+        assert!(out.next().await.is_none(), "空流应立即正常结束");
+    }
+
+    #[test]
+    fn gateway_config_timeout_defaults_are_sane() {
+        // 旧配置（无超时字段）反序列化时应获得默认值，而非报错（向后兼容契约）
+        let old_json = r#"{"enabled":true,"apiKey":"ccs-old","models":[]}"#;
+        let cfg: GatewayConfig = serde_json::from_str(old_json).expect("旧配置应可解析");
+        assert_eq!(cfg.non_streaming_timeout_secs, 600);
+        assert_eq!(cfg.streaming_first_byte_timeout_secs, 60);
+        assert_eq!(cfg.streaming_idle_timeout_secs, 120);
+        // 显式填写时应原样保留
+        let full_json = r#"{"enabled":true,"apiKey":"ccs-x","models":[],
+            "nonStreamingTimeoutSecs":300,"streamingFirstByteTimeoutSecs":30,
+            "streamingIdleTimeoutSecs":90}"#;
+        let cfg: GatewayConfig = serde_json::from_str(full_json).expect("完整配置应可解析");
+        assert_eq!(cfg.non_streaming_timeout_secs, 300);
+        assert_eq!(cfg.streaming_first_byte_timeout_secs, 30);
+        assert_eq!(cfg.streaming_idle_timeout_secs, 90);
+    }
+
+    #[test]
+    fn gateway_config_timeout_zero_disables() {
+        // 用户显式填 0 表示禁用对应超时，反序列化应保留 0
+        let json = r#"{"enabled":true,"apiKey":"ccs-0","models":[],
+            "nonStreamingTimeoutSecs":0,"streamingFirstByteTimeoutSecs":0,
+            "streamingIdleTimeoutSecs":0}"#;
+        let cfg: GatewayConfig = serde_json::from_str(json).expect("应可解析");
+        assert_eq!(cfg.non_streaming_timeout_secs, 0);
+        assert_eq!(cfg.streaming_first_byte_timeout_secs, 0);
+        assert_eq!(cfg.streaming_idle_timeout_secs, 0);
     }
 }

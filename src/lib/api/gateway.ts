@@ -30,6 +30,12 @@ export interface GatewayConfig {
   apiKey: string;
   /** 模型池 */
   models: GatewayModelEntry[];
+  /** 非流式请求总超时（秒），0 = 禁用，默认 600 */
+  nonStreamingTimeoutSecs?: number;
+  /** 流式首字节超时（秒），0 = 禁用，默认 60 */
+  streamingFirstByteTimeoutSecs?: number;
+  /** 流式空闲超时（秒），0 = 禁用，默认 120 */
+  streamingIdleTimeoutSecs?: number;
 }
 
 export const gatewayApi = {

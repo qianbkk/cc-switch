@@ -74,7 +74,9 @@ fn global_hyper_client() -> &'static HyperClient {
 
 /// 响应体读取上限（128 MiB）。正常非流式补全响应只有几十到几百 KiB；超过则视为
 /// 上游异常或恶意 payload，直接拒绝，避免代理进程被超大响应体/压缩炸弹耗尽内存。
-pub(crate) const MAX_RESPONSE_BODY_BYTES: usize = 128 * 1024 * 1024;
+///
+/// 单一事实来源：`super::limits::MAX_RESPONSE_BODY_BYTES`（集中常量，勿改此处数值）。
+pub(crate) use super::limits::MAX_RESPONSE_BODY_BYTES;
 
 /// Unified response wrapper that can hold either a hyper or reqwest response.
 ///

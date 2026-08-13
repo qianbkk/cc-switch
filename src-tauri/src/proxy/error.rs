@@ -11,6 +11,9 @@ pub enum ProxyError {
     #[error("上游响应体超过大小上限: {0} 字节")]
     ResponseBodyTooLarge(usize),
 
+    #[error("请求体超过大小上限: {0} 字节")]
+    RequestBodyTooLarge(usize),
+
     #[error("服务器已在运行")]
     AlreadyRunning,
 
@@ -161,6 +164,9 @@ impl IntoResponse for ProxyError {
                     }
                     ProxyError::ResponseBodyTooLarge(_) => {
                         (StatusCode::BAD_GATEWAY, self.to_string())
+                    }
+                    ProxyError::RequestBodyTooLarge(_) => {
+                        (StatusCode::PAYLOAD_TOO_LARGE, self.to_string())
                     }
                     ProxyError::UpstreamError { .. } => unreachable!(),
                 };
