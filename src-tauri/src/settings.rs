@@ -977,6 +977,14 @@ pub fn fork_features_enabled() -> bool {
         .fork_features_enabled
 }
 
+/// 测试专用：仅修改内存中的魔改开关（不写盘、不触发 save_settings_file），
+/// 供契约测试验证开关关闭时的 HTTP 行为。调用方负责在测试结束后恢复。
+#[cfg(test)]
+pub(crate) fn set_fork_features_enabled_for_test(enabled: bool) {
+    let mut guard = settings_store().write().unwrap_or_else(|e| e.into_inner());
+    guard.fork_features_enabled = enabled;
+}
+
 // ===== 当前供应商管理函数 =====
 
 /// 获取指定应用类型的当前供应商 ID（从本地 settings 读取）

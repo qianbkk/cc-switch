@@ -213,19 +213,25 @@ pub fn get_app_config_dir() -> PathBuf {
     // 同时也避免新安装因为 `HOME` 被设置而写入非预期路径。
     #[cfg(windows)]
     {
-        let default_db = default_dir.join("cc-switch.db");
-        if !default_db.exists() {
-            if let Ok(home_env) = std::env::var("HOME") {
-                let trimmed = home_env.trim();
-                if !trimmed.is_empty() {
-                    let legacy_dir = PathBuf::from(trimmed).join(".cc-switch");
-                    if legacy_dir.join("cc-switch.db").exists() {
-                        log::info!(
-                            "Detected v3.10.3 legacy database at {}, using it instead of {}",
-                            legacy_dir.display(),
-                            default_dir.display()
-                        );
-                        return legacy_dir;
+        // 测试隔离（CC_SWITCH_TEST_HOME 已设置）时跳过回退：tempdir 下没有
+        // 落盘数据库，而 MSYS/bash 的 HOME 指向真实用户目录，回退会让测试
+        // 读写用户真实配置（曾导致 model_pricing 测试污染真实文件）。
+        let test_isolation = std::env::var_os("CC_SWITCH_TEST_HOME").is_some_and(|v| !v.is_empty());
+        if !test_isolation {
+            let default_db = default_dir.join("cc-switch.db");
+            if !default_db.exists() {
+                if let Ok(home_env) = std::env::var("HOME") {
+                    let trimmed = home_env.trim();
+                    if !trimmed.is_empty() {
+                        let legacy_dir = PathBuf::from(trimmed).join(".cc-switch");
+                        if legacy_dir.join("cc-switch.db").exists() {
+                            log::info!(
+                                "Detected v3.10.3 legacy database at {}, using it instead of {}",
+                                legacy_dir.display(),
+                                default_dir.display()
+                            );
+                            return legacy_dir;
+                        }
                     }
                 }
             }

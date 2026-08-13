@@ -120,14 +120,63 @@ fn extract_client_key(headers: &HeaderMap) -> Option<String> {
     None
 }
 
-fn auth_error_response(status: StatusCode, msg: &str) -> Response {
+/// 构造统一错误响应（稳定契约，路线图第 17 项）：
+///
+/// ```json
+/// {
+///   "error": {
+///     "message": "人类可读信息",
+///     "type": "invalid_request_error",
+///     "code": "稳定机器可读错误码",
+///     "request_id": "本次请求唯一 id"
+///   }
+/// }
+/// ```
+///
+/// 同时写入 `x-request-id` 响应头，方便客户端与服务端日志关联。
+/// 客户端应依赖稳定的 `status` + `code` 处理异常，`message` 仅供展示。
+fn gateway_error_response(status: StatusCode, code: &str, message: impl Into<String>) -> Response {
+    let request_id = uuid::Uuid::new_v4().to_string();
     let body = Json(json!({
         "error": {
-            "message": msg,
+            "message": message.into(),
             "type": "invalid_request_error",
+            "code": code,
+            "request_id": request_id,
         }
     }));
-    (status, body).into_response()
+    let mut resp = (status, body).into_response();
+    if let Ok(v) = request_id.parse() {
+        resp.headers_mut().insert("x-request-id", v);
+    }
+    resp
+}
+
+/// 鉴权/路由层错误响应（code 为稳定契约错误码）。
+fn auth_error_response(status: StatusCode, code: &str, msg: &str) -> Response {
+    gateway_error_response(status, code, msg)
+}
+
+/// 将 `ProxyError` 映射为稳定契约错误码（供客户端机器处理）。
+fn proxy_error_code(error: &ProxyError) -> &'static str {
+    match error {
+        ProxyError::RequestBodyTooLarge(_) => "payload_too_large",
+        ProxyError::InvalidRequest(_) => "invalid_request",
+        ProxyError::ConfigError(_) => "config_error",
+        ProxyError::AuthError(_) => "unauthorized",
+        ProxyError::Timeout(_) => "upstream_timeout",
+        ProxyError::StreamIdleTimeout(_) => "upstream_idle_timeout",
+        ProxyError::ForwardFailed(_) => "upstream_unreachable",
+        ProxyError::NoAvailableProvider
+        | ProxyError::AllProvidersCircuitOpen
+        | ProxyError::NoProvidersConfigured
+        | ProxyError::MaxRetriesExceeded
+        | ProxyError::ProviderUnhealthy(_) => "upstream_unavailable",
+        ProxyError::TransformError(_) => "transform_error",
+        ProxyError::DatabaseError(_) => "database_error",
+        ProxyError::ResponseBodyTooLarge(_) => "response_too_large",
+        _ => "internal_error",
+    }
 }
 
 /// 鉴权：返回 `GatewayConfig`（用于 alias 查找）或 401/403 响应
@@ -139,6 +188,7 @@ fn authorize(
         log::error!("[Gateway] 加载配置失败: {e}");
         Box::new(auth_error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
+            "internal_error",
             "网关配置加载失败",
         ))
     })?;
@@ -147,6 +197,7 @@ fn authorize(
     if !crate::settings::fork_features_enabled() {
         return Err(Box::new(auth_error_response(
             StatusCode::FORBIDDEN,
+            "feature_disabled",
             "魔改功能已在设置中整体关闭，统一网关不可用",
         )));
     }
@@ -154,6 +205,7 @@ fn authorize(
     if !cfg.enabled {
         return Err(Box::new(auth_error_response(
             StatusCode::FORBIDDEN,
+            "gateway_disabled",
             "网关未启用，请在设置中打开「统一网关」开关",
         )));
     }
@@ -163,6 +215,7 @@ fn authorize(
         _ => {
             return Err(Box::new(auth_error_response(
                 StatusCode::UNAUTHORIZED,
+                "missing_api_key",
                 "缺少鉴权头（Authorization: Bearer <key> 或 x-api-key: <key>）",
             )));
         }
@@ -171,6 +224,7 @@ fn authorize(
     if client_key != cfg.api_key {
         return Err(Box::new(auth_error_response(
             StatusCode::UNAUTHORIZED,
+            "invalid_api_key",
             "网关 key 无效",
         )));
     }
@@ -201,7 +255,11 @@ fn alias_not_found_response(aliases: Vec<String>) -> Response {
     } else {
         format!("可用 alias: [{}]", aliases.join(", "))
     };
-    auth_error_response(StatusCode::BAD_REQUEST, &format!("alias 未命中；{joined}"))
+    auth_error_response(
+        StatusCode::BAD_REQUEST,
+        "alias_not_found",
+        &format!("alias 未命中；{joined}"),
+    )
 }
 
 // =====================================================================
@@ -215,6 +273,7 @@ fn load_provider(
     let app_type = AppType::from_str(&entry.app_type).map_err(|_| {
         Box::new(auth_error_response(
             StatusCode::BAD_REQUEST,
+            "invalid_app_type",
             &format!(
                 "非法 appType: {}（期望 claude | codex | gemini）",
                 entry.app_type
@@ -228,12 +287,14 @@ fn load_provider(
             log::error!("[Gateway] 数据库读取 provider 失败: {e}");
             Box::new(auth_error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
                 "读取供应商失败",
             ))
         })?
         .ok_or_else(|| {
             Box::new(auth_error_response(
                 StatusCode::NOT_FOUND,
+                "provider_not_found",
                 &format!(
                     "供应商不存在：provider_id={}, app_type={}",
                     entry.provider_id, entry.app_type
@@ -676,13 +737,7 @@ fn build_inbound_sse_stream(
 fn error_to_response(error: ProxyError) -> Response {
     let status_code = map_proxy_error_to_status(&error);
     let status = StatusCode::from_u16(status_code).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
-    let body = Json(json!({
-        "error": {
-            "message": error.to_string(),
-            "type": "invalid_request_error",
-        }
-    }));
-    (status, body).into_response()
+    gateway_error_response(status, proxy_error_code(&error), error.to_string())
 }
 
 // =====================================================================
@@ -761,7 +816,10 @@ async fn process_gateway_request(
     let mut body: Value = match serde_json::from_slice(&body_bytes) {
         Ok(b) => b,
         Err(e) => {
-            return error_to_response(ProxyError::Internal(format!("parse body: {e}")));
+            // 无效 JSON 属于客户端错误：400，而非 500。
+            return error_to_response(ProxyError::InvalidRequest(format!(
+                "请求体不是合法 JSON: {e}"
+            )));
         }
     };
 
@@ -775,7 +833,11 @@ async fn process_gateway_request(
     let model_in_body = match extract_model(&body, proto) {
         Some(m) => m.to_string(),
         None => {
-            return auth_error_response(StatusCode::BAD_REQUEST, "请求体缺少 model 字段");
+            return auth_error_response(
+                StatusCode::BAD_REQUEST,
+                "invalid_request",
+                "请求体缺少 model 字段",
+            );
         }
     };
 
@@ -783,6 +845,15 @@ async fn process_gateway_request(
         Ok(e) => e,
         Err(list) => return alias_not_found_response(list),
     };
+
+    // 防御：重复 alias（配置保存层已校验，路由层兜底拒绝，避免歧义路由）
+    if cfg.models.iter().filter(|m| m.alias == entry.alias).count() > 1 {
+        return auth_error_response(
+            StatusCode::BAD_REQUEST,
+            "duplicate_alias",
+            &format!("alias 重复定义: {}", entry.alias),
+        );
+    }
 
     // 改写 model
     if let Some(obj) = body.as_object_mut() {
@@ -795,6 +866,7 @@ async fn process_gateway_request(
         Err(_) => {
             return auth_error_response(
                 StatusCode::BAD_REQUEST,
+                "invalid_app_type",
                 &format!("非法 appType: {}", entry.app_type),
             );
         }
@@ -860,7 +932,6 @@ mod tests {
     const KEY: &str = "ccs-testkey";
 
     fn setup_router(enabled: bool) -> axum::Router {
-        let db = Arc::new(Database::memory().expect("memory db"));
         let cfg = json!({
             "enabled": enabled,
             "apiKey": KEY,
@@ -871,8 +942,40 @@ mod tests {
                 "model": "claude-test-1"
             }]
         });
+        setup_router_with_cfg(cfg)
+    }
+
+    /// 用自定义配置构建路由，同时返回 db 句柄（测试可更新配置验证 Key 轮换等场景）。
+    fn setup_router_with_db(cfg: Value) -> (axum::Router, Arc<crate::database::Database>) {
+        let db = Arc::new(Database::memory().expect("memory db"));
         db.set_setting("gateway_config", &cfg.to_string())
             .expect("save gateway config");
+        let server = ProxyServer::new(ProxyConfig::default(), db.clone(), None);
+        (server.build_router(), db)
+    }
+
+    fn setup_router_with_cfg(cfg: Value) -> axum::Router {
+        setup_router_with_db(cfg).0
+    }
+
+    /// 构造带已保存 provider 的路由（models 端点不泄露 Key / 供应商存在场景）。
+    fn setup_router_with_provider(cfg: Value, provider_id: &str, app_type: &str) -> axum::Router {
+        let db = Arc::new(Database::memory().expect("memory db"));
+        db.set_setting("gateway_config", &cfg.to_string())
+            .expect("save gateway config");
+        let provider = crate::Provider::with_id(
+            provider_id.to_string(),
+            "Test Provider".to_string(),
+            json!({
+                "env": {
+                    "ANTHROPIC_API_KEY": "sk-ant-secret-key-must-not-leak",
+                    "ANTHROPIC_BASE_URL": "http://127.0.0.1:1"
+                }
+            }),
+            None,
+        );
+        db.save_provider(app_type, &provider)
+            .expect("save provider");
         let server = ProxyServer::new(ProxyConfig::default(), db, None);
         server.build_router()
     }
@@ -1206,5 +1309,221 @@ mod tests {
         assert_eq!(cfg.non_streaming_timeout_secs, 0);
         assert_eq!(cfg.streaming_first_byte_timeout_secs, 0);
         assert_eq!(cfg.streaming_idle_timeout_secs, 0);
+    }
+
+    // ------------------------------------------------------------------
+    // 契约测试（路线图第 17 项）：鉴权 / 路由 / 错误契约
+    // ------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn key_rotation_invalidates_old_key() {
+        let cfg = json!({
+            "enabled": true,
+            "apiKey": KEY,
+            "models": [{
+                "alias": "test-provider/claude-test-1",
+                "providerId": "prov-1",
+                "appType": "claude",
+                "model": "claude-test-1"
+            }]
+        });
+        let (router, db) = setup_router_with_db(cfg);
+
+        // 旧 Key 可用
+        let req = http::Request::builder()
+            .method("GET")
+            .uri("/gateway/v1/models")
+            .header("authorization", format!("Bearer {KEY}"))
+            .body(AxumBody::empty())
+            .unwrap();
+        let resp = router.clone().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), http::StatusCode::OK);
+
+        // 轮换 Key：更新配置后旧 Key 立即失效
+        let new_cfg = json!({
+            "enabled": true,
+            "apiKey": "ccs-rotated-key",
+            "models": []
+        });
+        db.set_setting("gateway_config", &new_cfg.to_string())
+            .expect("rotate key");
+        let req = http::Request::builder()
+            .method("GET")
+            .uri("/gateway/v1/models")
+            .header("authorization", format!("Bearer {KEY}"))
+            .body(AxumBody::empty())
+            .unwrap();
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), http::StatusCode::UNAUTHORIZED);
+        let body = body_json(resp).await;
+        assert_eq!(body["error"]["code"], "invalid_api_key");
+    }
+
+    #[tokio::test]
+    async fn core_feature_switch_disabled_returns_403() {
+        // 魔改总开关关闭时，即使网关 enabled=true 也返回 403（而非 404 或透传）
+        let router = setup_router(true);
+        struct ForkGuard;
+        impl Drop for ForkGuard {
+            fn drop(&mut self) {
+                crate::settings::set_fork_features_enabled_for_test(true);
+            }
+        }
+        crate::settings::set_fork_features_enabled_for_test(false);
+        let _guard = ForkGuard;
+        let resp = router
+            .oneshot(post_messages(Some(KEY), "test-provider/claude-test-1"))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), http::StatusCode::FORBIDDEN);
+        let body = body_json(resp).await;
+        assert_eq!(body["error"]["code"], "feature_disabled");
+    }
+
+    #[tokio::test]
+    async fn duplicate_alias_returns_400() {
+        let cfg = json!({
+            "enabled": true,
+            "apiKey": KEY,
+            "models": [
+                {
+                    "alias": "dup/model",
+                    "providerId": "prov-1",
+                    "appType": "claude",
+                    "model": "claude-test-1"
+                },
+                {
+                    "alias": "dup/model",
+                    "providerId": "prov-2",
+                    "appType": "claude",
+                    "model": "claude-test-2"
+                }
+            ]
+        });
+        let router = setup_router_with_cfg(cfg);
+        let resp = router
+            .oneshot(post_messages(Some(KEY), "dup/model"))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), http::StatusCode::BAD_REQUEST);
+        let body = body_json(resp).await;
+        assert_eq!(body["error"]["code"], "duplicate_alias");
+    }
+
+    #[tokio::test]
+    async fn deleted_provider_returns_404() {
+        // 默认配置引用 prov-1，但 memory db 中不存在该 provider → 404
+        let router = setup_router(true);
+        let resp = router
+            .oneshot(post_messages(Some(KEY), "test-provider/claude-test-1"))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), http::StatusCode::NOT_FOUND);
+        let body = body_json(resp).await;
+        assert_eq!(body["error"]["code"], "provider_not_found");
+    }
+
+    #[tokio::test]
+    async fn invalid_json_returns_400() {
+        let router = setup_router(true);
+        let req = http::Request::builder()
+            .method("POST")
+            .uri("/gateway/v1/messages")
+            .header("authorization", format!("Bearer {KEY}"))
+            .header("content-type", "application/json")
+            .body(AxumBody::from("this is not json"))
+            .unwrap();
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), http::StatusCode::BAD_REQUEST);
+        let body = body_json(resp).await;
+        assert_eq!(body["error"]["code"], "invalid_request");
+    }
+
+    #[tokio::test]
+    async fn wrong_method_returns_405() {
+        let router = setup_router(true);
+        let req = http::Request::builder()
+            .method("GET")
+            .uri("/gateway/v1/messages")
+            .header("authorization", format!("Bearer {KEY}"))
+            .body(AxumBody::empty())
+            .unwrap();
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), http::StatusCode::METHOD_NOT_ALLOWED);
+    }
+
+    #[tokio::test]
+    async fn models_endpoint_does_not_leak_provider_key() {
+        let cfg = json!({
+            "enabled": true,
+            "apiKey": KEY,
+            "models": [{
+                "alias": "test-provider/claude-test-1",
+                "providerId": "prov-1",
+                "appType": "claude",
+                "model": "claude-test-1"
+            }]
+        });
+        let router = setup_router_with_provider(cfg, "prov-1", "claude");
+        let req = http::Request::builder()
+            .method("GET")
+            .uri("/gateway/v1/models")
+            .header("authorization", format!("Bearer {KEY}"))
+            .body(AxumBody::empty())
+            .unwrap();
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), http::StatusCode::OK);
+        let body = body_json(resp).await;
+        let raw = body.to_string();
+        assert!(
+            !raw.contains("sk-ant-secret"),
+            "models 端点泄露了 provider Key: {raw}"
+        );
+        assert!(
+            !raw.contains("ANTHROPIC_API_KEY"),
+            "models 端点泄露了环境变量字段: {raw}"
+        );
+        // 仍能拿到 alias 与供应商名
+        assert_eq!(body["data"][0]["id"], "test-provider/claude-test-1");
+        assert_eq!(body["data"][0]["owned_by"], "Test Provider");
+    }
+
+    #[tokio::test]
+    async fn error_response_has_stable_code_and_request_id() {
+        let router = setup_router(true);
+        // 无 Key → 401 missing_api_key + request_id + x-request-id 头
+        let resp = router
+            .clone()
+            .oneshot(post_messages(None, "test-provider/claude-test-1"))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), http::StatusCode::UNAUTHORIZED);
+        assert!(resp.headers().contains_key("x-request-id"));
+        let body = body_json(resp).await;
+        assert_eq!(body["error"]["code"], "missing_api_key");
+        assert!(
+            body["error"]["request_id"]
+                .as_str()
+                .map(|s| !s.is_empty())
+                .unwrap_or(false),
+            "request_id 缺失"
+        );
+    }
+
+    #[tokio::test]
+    async fn save_gateway_config_rejects_duplicate_alias() {
+        // 配置保存层校验：重复 alias 直接报错
+        let cfg = json!({
+            "enabled": true,
+            "apiKey": KEY,
+            "models": [
+                {"alias": "a/model", "providerId": "p1", "appType": "claude", "model": "m1"},
+                {"alias": "a/model", "providerId": "p2", "appType": "claude", "model": "m2"}
+            ]
+        });
+        let parsed: GatewayConfig = serde_json::from_value(cfg).expect("parse");
+        let err = crate::commands::gateway::validate_aliases_unique(&parsed);
+        assert!(err.is_err(), "重复 alias 应被拒绝");
+        assert!(err.unwrap_err().contains("alias 重复"));
     }
 }
