@@ -122,9 +122,21 @@ fn load_or_init(db: &crate::database::Database) -> Result<GatewayConfig, String>
 }
 
 fn persist(db: &crate::database::Database, cfg: &GatewayConfig) -> Result<(), String> {
+    validate_aliases_unique(cfg)?;
     let serialized = serde_json::to_string(cfg).map_err(|e| format!("序列化配置失败: {e}"))?;
     db.set_setting(GATEWAY_CONFIG_KEY, &serialized)
         .map_err(|e| format!("写入设置失败: {e}"))
+}
+
+/// alias 必须唯一：重复 alias 会使路由产生歧义（HTTP 层会拒绝，保存层提前报错）。
+pub(crate) fn validate_aliases_unique(cfg: &GatewayConfig) -> Result<(), String> {
+    let mut seen = std::collections::HashSet::new();
+    for m in &cfg.models {
+        if !seen.insert(m.alias.clone()) {
+            return Err(format!("alias 重复：{}，请修改后重试", m.alias));
+        }
+    }
+    Ok(())
 }
 
 fn persist_disabled_after_start_failure(
