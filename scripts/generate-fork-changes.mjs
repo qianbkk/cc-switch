@@ -43,8 +43,15 @@ function git(args) {
 }
 
 const args = process.argv.slice(2);
-const baseFlag = args.indexOf("--base");
-let base = baseFlag >= 0 && args[baseFlag + 1] ? args[baseFlag + 1] : null;
+const flagOf = (name) => {
+  const i = args.indexOf(name);
+  return i >= 0 && args[i + 1] ? args[i + 1] : null;
+};
+const baseFlag = flagOf("--base");
+// 统计对象（"当前 main"）：本地默认 main 分支；CI 的 PR 场景 checkout 是
+// merge ref（无 main 分支），必须显式传 --head origin/main 才能与本地口径一致。
+const headFlag = flagOf("--head") || "main";
+let base = baseFlag;
 
 if (!base) {
   // 默认基线：upstream/main；不存在则退回 origin/main（口径不同，明确警告）
@@ -63,20 +70,24 @@ if (!base) {
   console.error(`❌ 基线 ${base} 不存在`);
   process.exit(1);
 }
+if (!git(["rev-parse", "--verify", `${headFlag}^{commit}`])) {
+  console.error(`❌ 统计对象 ${headFlag} 不存在（PR 场景请传 --head origin/main）`);
+  process.exit(1);
+}
 
-const commitsTotal = git(["rev-list", "--count", "main", "--not", base]);
+const commitsTotal = git(["rev-list", "--count", headFlag, "--not", base]);
 const commitsNonMerge = git([
   "rev-list",
   "--count",
   "--no-merges",
-  "main",
+  headFlag,
   "--not",
   base,
 ]);
-const shortstat = git(["diff", "--shortstat", base, "main"]);
-// 口径日期取 main 最近提交日期（而非“今天”）：保证生成器完全确定性，
+const shortstat = git(["diff", "--shortstat", base, headFlag]);
+// 口径日期取统计对象最近提交日期（而非“今天”）：保证生成器完全确定性，
 // 任意时间重复生成结果一致，CI 的 freshness 校验才可靠。
-const statsDate = git(["log", "-1", "--format=%cs", "main"]);
+const statsDate = git(["log", "-1", "--format=%cs", headFlag]);
 
 if (
   commitsTotal === null ||
