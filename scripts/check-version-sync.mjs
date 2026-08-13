@@ -6,7 +6,7 @@
  * 1. package.json / src-tauri/tauri.conf.json / src-tauri/Cargo.toml 三处
  *    `version` 必须完全一致（三处不同步会导致产物文件名、更新检查、About 页
  *    显示互相矛盾）。
- * 2. 发布构建（env `CC_SWITCH_FORK_RELEASE_TAG` 存在，形如 `m3.19.1-3`）时，
+ * 2. 发布构建（env `CC_SWITCH_FORK_RELEASE_TAG` 存在，形如 `m3.19.2-1`）时，
  *    tag 中的基础版本必须等于三处 version——错误 tag 直接阻止发布。
  *
  * 用法：node scripts/check-version-sync.mjs
@@ -51,7 +51,7 @@ if (forkTag) {
   const m = forkTag.match(/^m(\d+\.\d+\.\d+)-(\d+)$/);
   if (!m) {
     failures.push(
-      `CC_SWITCH_FORK_RELEASE_TAG=${forkTag} 格式非法（应为 m<base>-<rev>，如 m3.19.1-3）`,
+      `CC_SWITCH_FORK_RELEASE_TAG=${forkTag} 格式非法（应为 m<base>-<rev>，如 m3.19.2-1）`,
     );
   } else if (m[1] !== pkg.version) {
     failures.push(`fork tag 基础版本 ${m[1]} 与应用版本 ${pkg.version} 不一致`);

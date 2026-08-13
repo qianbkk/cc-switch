@@ -2,7 +2,7 @@
 //!
 //! 统一「Fork 完整版本」的解析与展示规则，About 页、更新检查、详情页共用：
 //!
-//! - **发布构建**（编译时注入了 `CC_SWITCH_FORK_RELEASE_TAG`，形如 `m3.19.1-3`）：
+//! - **发布构建**（编译时注入了 `CC_SWITCH_FORK_RELEASE_TAG`，形如 `m3.19.2-1`）：
 //!   `display_version` 与 `update_tag` 都是完整 tag；build.rs 同时注入
 //!   commit SHA 与构建时间（由发布 workflow 设置）。
 //! - **本地开发构建**（无发布 tag）：`display_version` 显示 `dev+<short-sha>`
@@ -18,7 +18,7 @@ const EMBEDDED_BUILD_TIME: &str = env!("CC_SWITCH_BUILD_TIME");
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ForkVersionInfo {
-    /// 上游基础版本（如 `3.19.1`），取自应用运行时版本
+    /// 上游基础版本（如 `3.19.2`），取自应用运行时版本
     pub base_version: String,
     /// 展示版本：发布构建为完整 `m<base>-<rev>` tag；本地构建为 `dev+<short-sha>`
     pub display_version: String,
@@ -65,9 +65,9 @@ mod tests {
     fn release_build_uses_embedded_tag() {
         // 发布路径逻辑独立于 env 实测：直接断言结构函数的行为（tag 注入在编译期）。
         // 这里通过构造逻辑验证——env 常量无法在测试中修改，仅验证 dev 分支与结构。
-        let info = fork_version_info("3.19.1");
+        let info = fork_version_info("3.19.2");
         // 无论编译环境如何，字段结构完整、base_version 正确
-        assert_eq!(info.base_version, "3.19.1");
+        assert_eq!(info.base_version, "3.19.2");
         assert!(!info.display_version.is_empty());
         assert!(!info.update_tag.is_empty());
         // update_tag 必须以 m 开头（两种分支都是 m 前缀）
@@ -77,11 +77,11 @@ mod tests {
     #[test]
     fn update_tag_always_parseable_for_updates() {
         // update_tag 必须能被 parse_fork_version 解析（更新检查依赖）
-        let info = fork_version_info("3.19.1");
+        let info = fork_version_info("3.19.2");
         let tag = &info.update_tag;
         let version = tag.strip_prefix('m').expect("m 前缀");
         let (upstream, revision) = version.rsplit_once('-').expect("revision 分隔");
-        assert_eq!(upstream, "3.19.1");
+        assert_eq!(upstream, "3.19.2");
         let _rev: u64 = revision.parse().expect("revision 是数字");
     }
 }
