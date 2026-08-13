@@ -281,6 +281,7 @@ fn build_forwarder(
 }
 
 /// 实际发起单 provider 转发
+#[allow(clippy::too_many_arguments)] // 与 forwarder::forward_with_retry_inner 一致：参数为转发所需上下文
 async fn forward_with_single_provider(
     state: &ProxyState,
     provider: Provider,
