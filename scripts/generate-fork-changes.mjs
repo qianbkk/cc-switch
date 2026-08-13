@@ -74,9 +74,17 @@ const commitsNonMerge = git([
   base,
 ]);
 const shortstat = git(["diff", "--shortstat", base, "main"]);
+// 口径日期取 main 最近提交日期（而非“今天”）：保证生成器完全确定性，
+// 任意时间重复生成结果一致，CI 的 freshness 校验才可靠。
+const statsDate = git(["log", "-1", "--format=%cs", "main"]);
 
-if (commitsTotal === null || commitsNonMerge === null || shortstat === null) {
-  console.error("❌ git 数据采集失败（rev-list / diff 不可用）");
+if (
+  commitsTotal === null ||
+  commitsNonMerge === null ||
+  shortstat === null ||
+  statsDate === null
+) {
+  console.error("❌ git 数据采集失败（rev-list / diff / log 不可用）");
   process.exit(1);
 }
 
@@ -87,8 +95,6 @@ const delM = shortstat.match(/(\d+) deletions?\(-\)/);
 const diffFiles = filesM ? filesM[1] : "0";
 const diffAdded = addM ? addM[1] : "0";
 const diffRemoved = delM ? delM[1] : "0";
-
-const statsDate = new Date().toISOString().slice(0, 10);
 
 // ---- 模板渲染 ----
 
