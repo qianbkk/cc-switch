@@ -32,6 +32,27 @@ pub struct GatewayConfig {
     pub api_key: String,
     #[serde(default)]
     pub models: Vec<GatewayModelEntry>,
+    /// 非流式请求总超时（秒）。0 = 禁用（不推荐）；默认 600（与普通代理一致）。
+    #[serde(default = "default_non_streaming_timeout_secs")]
+    pub non_streaming_timeout_secs: u64,
+    /// 流式请求首字节超时（秒）。0 = 禁用；默认 60。
+    #[serde(default = "default_streaming_first_byte_timeout_secs")]
+    pub streaming_first_byte_timeout_secs: u64,
+    /// 流式请求空闲超时（秒）：两个数据块之间的最大间隔。0 = 禁用；默认 120。
+    #[serde(default = "default_streaming_idle_timeout_secs")]
+    pub streaming_idle_timeout_secs: u64,
+}
+
+fn default_non_streaming_timeout_secs() -> u64 {
+    600
+}
+
+fn default_streaming_first_byte_timeout_secs() -> u64 {
+    60
+}
+
+fn default_streaming_idle_timeout_secs() -> u64 {
+    120
 }
 
 const GATEWAY_CONFIG_KEY: &str = "gateway_config";
@@ -67,6 +88,9 @@ fn build_default_config() -> GatewayConfig {
         enabled: false,
         api_key,
         models: Vec::new(),
+        non_streaming_timeout_secs: default_non_streaming_timeout_secs(),
+        streaming_first_byte_timeout_secs: default_streaming_first_byte_timeout_secs(),
+        streaming_idle_timeout_secs: default_streaming_idle_timeout_secs(),
     }
 }
 
@@ -273,6 +297,9 @@ mod tests {
                 app_type: "codex".to_string(),
                 model: "model-1".to_string(),
             }],
+            non_streaming_timeout_secs: 600,
+            streaming_first_byte_timeout_secs: 60,
+            streaming_idle_timeout_secs: 120,
         };
         persist(&db, &config).expect("persist enabled config");
 

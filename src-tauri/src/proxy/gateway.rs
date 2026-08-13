@@ -248,12 +248,20 @@ fn load_provider(
 // 转发构造
 // =====================================================================
 
-/// 构建单 provider 候选的 `RequestForwarder`（与「failover 关闭 +
-/// max_retries=0」语义一致：网关只尝试一家、不启用超时与熔断探测）
-fn build_forwarder(state: &ProxyState, provider: &Provider) -> RequestForwarder {
+/// 构建单 provider 候选的 `RequestForwarder`。
+///
+/// 语义（路线图第 13 项）：
+/// - 保持「单别名只路由一个供应商」：`max_retries=0`，不悄悄故障转移。
+/// - 超时不再全部禁用：非流式 / 首字节 / 流空闲超时读取网关配置
+///   （`GatewayConfig::*_timeout_secs`，默认 600/60/120），0 仍表示禁用。
+fn build_forwarder(
+    state: &ProxyState,
+    provider: &Provider,
+    cfg: &GatewayConfig,
+) -> RequestForwarder {
     RequestForwarder::new(
         state.provider_router.clone(),
-        0, // non_streaming_timeout (disabled)
+        cfg.non_streaming_timeout_secs,
         state.status.clone(),
         state.current_providers.clone(),
         state.gemini_shadow.clone(),
@@ -263,8 +271,8 @@ fn build_forwarder(state: &ProxyState, provider: &Provider) -> RequestForwarder 
         provider.id.clone(),
         String::new(), // session_id (unused for gateway)
         false,         // session_client_provided
-        0,             // streaming_first_byte_timeout (disabled)
-        0,             // streaming_idle_timeout (disabled)
+        cfg.streaming_first_byte_timeout_secs,
+        cfg.streaming_idle_timeout_secs,
         RectifierConfig::default(),
         OptimizerConfig::default(),
         CopilotOptimizerConfig::default(),
@@ -281,6 +289,7 @@ async fn forward_with_single_provider(
     body: Value,
     headers: HeaderMap,
     extensions: Extensions,
+    cfg: &GatewayConfig,
 ) -> Result<
     (
         ProxyResponse,
@@ -293,7 +302,7 @@ async fn forward_with_single_provider(
         .get("stream")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
-    let forwarder = build_forwarder(state, &provider);
+    let forwarder = build_forwarder(state, &provider, cfg);
     let result = forwarder
         .forward_with_retry(
             &app_type,
@@ -321,6 +330,7 @@ async fn proxy_response_to_axum(
     inbound: InboundProtocol,
     upstream_format: Option<String>,
     is_streaming: bool,
+    streaming_idle_timeout_secs: u64,
 ) -> Response {
     let status = resp.status();
     let headers = resp.headers().clone();
@@ -336,6 +346,13 @@ async fn proxy_response_to_axum(
             })),
             MAX_SSE_EVENT_BYTES,
         );
+        // 再加流空闲超时守卫：两个数据块之间的最大间隔超过配置值即终止流，
+        // 防止上游卡死导致连接无限挂起（0 = 禁用）。
+        let guarded_stream = if streaming_idle_timeout_secs > 0 {
+            limit_sse_idle_timeout(guarded_stream, streaming_idle_timeout_secs)
+        } else {
+            guarded_stream
+        };
         let body_stream =
             match build_inbound_sse_stream(guarded_stream, upstream_format.as_deref(), inbound) {
                 Ok(s) => s,
@@ -575,6 +592,46 @@ fn find_sse_event_delimiter(buf: &[u8]) -> Option<(usize, usize)> {
     best
 }
 
+/// 流空闲超时守卫：包装 SSE 字节流，两个数据块之间的间隔超过 `idle_secs`
+/// 立即终止流并报错（504 语义），防止上游卡死导致连接无限挂起。
+///
+/// 注意：只对「块间间隔」计时，不限制总时长——长流式补全（如长文档生成）
+/// 只要持续有数据就正常通过。`idle_secs = 0` 应在外层过滤，不调用本函数。
+fn limit_sse_idle_timeout(upstream: SseStream, idle_secs: u64) -> SseStream {
+    Box::pin(async_stream::stream! {
+        let mut stream = upstream;
+        loop {
+            let next = tokio::time::timeout(
+                std::time::Duration::from_secs(idle_secs),
+                stream.next(),
+            )
+            .await;
+            match next {
+                Ok(Some(item)) => match item {
+                    Ok(bytes) => yield Ok(bytes),
+                    Err(e) => {
+                        yield Err(e);
+                        return;
+                    }
+                },
+                Ok(None) => {
+                    // 上游流正常结束
+                    return;
+                }
+                Err(_elapsed) => {
+                    log::warn!(
+                        "[Gateway] 流式响应空闲超时（{idle_secs}s 无数据），终止流"
+                    );
+                    yield Err(std::io::Error::other(format!(
+                        "streaming idle timeout after {idle_secs}s without data"
+                    )));
+                    return;
+                }
+            }
+        }
+    })
+}
+
 /// SSE 链式构造：上游 → Anthropic SSE → 入站 SSE
 fn build_inbound_sse_stream(
     upstream: SseStream,
@@ -765,12 +822,19 @@ async fn process_gateway_request(
         .unwrap_or(false);
 
     match forward_with_single_provider(
-        &state, provider, app_type, endpoint, body, headers, extensions,
+        &state, provider, app_type, endpoint, body, headers, extensions, &cfg,
     )
     .await
     {
         Ok((resp, upstream_format, _is_streaming_request)) => {
-            proxy_response_to_axum(resp, inbound, upstream_format, is_streaming).await
+            proxy_response_to_axum(
+                resp,
+                inbound,
+                upstream_format,
+                is_streaming,
+                cfg.streaming_idle_timeout_secs,
+            )
+            .await
         }
         Err(e) => error_to_response(e),
     }
@@ -1060,5 +1124,86 @@ mod tests {
             crate::proxy::limits::MAX_SSE_EVENT_BYTES
                 < crate::proxy::limits::MAX_RESPONSE_BODY_BYTES
         );
+    }
+
+    // ------------------------------------------------------------------
+    // 超时 / 重试语义（路线图 13）
+    // ------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn idle_timeout_guard_terminates_silent_stream() {
+        use futures::stream;
+        use futures::StreamExt as _;
+
+        // 用一个「永不产出数据」的 pending stream 模拟上游卡死
+        let input: SseStream = Box::pin(stream::pending::<Result<Bytes, std::io::Error>>());
+        let mut out = limit_sse_idle_timeout(input, 1); // 1s 空闲超时
+        let first = tokio::time::timeout(std::time::Duration::from_secs(5), out.next()).await;
+        assert!(first.is_ok(), "超时后应产生终止 item");
+        assert!(
+            first.unwrap().unwrap().is_err(),
+            "空闲超时应报错终止（而非无限挂起）"
+        );
+    }
+
+    #[tokio::test]
+    async fn idle_timeout_guard_passes_active_stream() {
+        use bytes::Bytes;
+        use futures::stream;
+        use futures::StreamExt as _;
+
+        // 持续有数据的流（间隔远小于超时）应全部通过
+        let input: SseStream = Box::pin(stream::iter(vec![
+            Ok::<Bytes, std::io::Error>(Bytes::from("data: a\n\n")),
+            Ok(Bytes::from("data: b\n\n")),
+        ]));
+        let mut out = limit_sse_idle_timeout(input, 60);
+        let mut collected = Vec::new();
+        while let Some(item) = out.next().await {
+            collected.push(item.unwrap());
+        }
+        assert_eq!(collected.len(), 2);
+        assert_eq!(collected[0], Bytes::from("data: a\n\n"));
+        assert_eq!(collected[1], Bytes::from("data: b\n\n"));
+    }
+
+    #[tokio::test]
+    async fn idle_timeout_guard_ends_normally_on_upstream_close() {
+        use futures::stream;
+        use futures::StreamExt as _;
+
+        let input: SseStream = Box::pin(stream::iter(Vec::<Result<Bytes, std::io::Error>>::new()));
+        let mut out = limit_sse_idle_timeout(input, 60);
+        assert!(out.next().await.is_none(), "空流应立即正常结束");
+    }
+
+    #[test]
+    fn gateway_config_timeout_defaults_are_sane() {
+        // 旧配置（无超时字段）反序列化时应获得默认值，而非报错（向后兼容契约）
+        let old_json = r#"{"enabled":true,"apiKey":"ccs-old","models":[]}"#;
+        let cfg: GatewayConfig = serde_json::from_str(old_json).expect("旧配置应可解析");
+        assert_eq!(cfg.non_streaming_timeout_secs, 600);
+        assert_eq!(cfg.streaming_first_byte_timeout_secs, 60);
+        assert_eq!(cfg.streaming_idle_timeout_secs, 120);
+        // 显式填写时应原样保留
+        let full_json = r#"{"enabled":true,"apiKey":"ccs-x","models":[],
+            "nonStreamingTimeoutSecs":300,"streamingFirstByteTimeoutSecs":30,
+            "streamingIdleTimeoutSecs":90}"#;
+        let cfg: GatewayConfig = serde_json::from_str(full_json).expect("完整配置应可解析");
+        assert_eq!(cfg.non_streaming_timeout_secs, 300);
+        assert_eq!(cfg.streaming_first_byte_timeout_secs, 30);
+        assert_eq!(cfg.streaming_idle_timeout_secs, 90);
+    }
+
+    #[test]
+    fn gateway_config_timeout_zero_disables() {
+        // 用户显式填 0 表示禁用对应超时，反序列化应保留 0
+        let json = r#"{"enabled":true,"apiKey":"ccs-0","models":[],
+            "nonStreamingTimeoutSecs":0,"streamingFirstByteTimeoutSecs":0,
+            "streamingIdleTimeoutSecs":0}"#;
+        let cfg: GatewayConfig = serde_json::from_str(json).expect("应可解析");
+        assert_eq!(cfg.non_streaming_timeout_secs, 0);
+        assert_eq!(cfg.streaming_first_byte_timeout_secs, 0);
+        assert_eq!(cfg.streaming_idle_timeout_secs, 0);
     }
 }
