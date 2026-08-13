@@ -88,14 +88,17 @@ const shortstat = git(["diff", "--shortstat", base, headFlag]);
 // 口径日期取统计对象最近提交日期（而非“今天”）：保证生成器完全确定性，
 // 任意时间重复生成结果一致，CI 的 freshness 校验才可靠。
 const statsDate = git(["log", "-1", "--format=%cs", headFlag]);
+// 基线短 hash 写入页面：CI 复现时按页面记录的口径生成（消除上游漂移）
+const baseCommit = git(["rev-parse", "--short", `${base}^{commit}`]);
 
 if (
   commitsTotal === null ||
   commitsNonMerge === null ||
   shortstat === null ||
-  statsDate === null
+  statsDate === null ||
+  baseCommit === null
 ) {
-  console.error("❌ git 数据采集失败（rev-list / diff / log 不可用）");
+  console.error("❌ git 数据采集失败（rev-list / diff / log / rev-parse 不可用）");
   process.exit(1);
 }
 
@@ -124,6 +127,7 @@ const placeholders = {
   DIFF_ADDED: diffAdded,
   DIFF_REMOVED: diffRemoved,
   STATS_DATE: statsDate,
+  BASE_COMMIT: baseCommit,
 };
 
 for (const [key, value] of Object.entries(placeholders)) {
