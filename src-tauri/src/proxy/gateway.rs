@@ -926,8 +926,8 @@ mod tests {
     use axum::body::Body as AxumBody;
     use http_body_util::BodyExt as _;
     use serde_json::{json, Value};
-    use std::sync::Arc;
     use serial_test::serial;
+    use std::sync::Arc;
     use tower::ServiceExt;
 
     const KEY: &str = "ccs-testkey";
