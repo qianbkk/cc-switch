@@ -927,6 +927,7 @@ mod tests {
     use http_body_util::BodyExt as _;
     use serde_json::{json, Value};
     use std::sync::Arc;
+    use serial_test::serial;
     use tower::ServiceExt;
 
     const KEY: &str = "ccs-testkey";
@@ -1001,6 +1002,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn missing_auth_returns_401() {
         let router = setup_router(true);
         let resp = router
@@ -1011,6 +1013,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn wrong_key_returns_401() {
         let router = setup_router(true);
         let resp = router
@@ -1024,6 +1027,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn disabled_gateway_returns_403() {
         let router = setup_router(false);
         let resp = router
@@ -1034,6 +1038,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn unknown_alias_returns_400_with_available_list() {
         let router = setup_router(true);
         let resp = router
@@ -1050,6 +1055,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn models_endpoint_lists_aliases() {
         let router = setup_router(true);
         let req = http::Request::builder()
@@ -1066,6 +1072,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn x_api_key_header_is_accepted() {
         let router = setup_router(true);
         let req = http::Request::builder()
@@ -1108,6 +1115,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn limit_sse_event_size_passes_normal_events_through() {
         use bytes::Bytes;
         use futures::stream;
@@ -1129,6 +1137,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn limit_sse_event_size_rejects_oversized_single_event() {
         use bytes::Bytes;
         use futures::stream;
@@ -1150,6 +1159,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn limit_sse_event_size_rejects_boundless_accumulation() {
         use bytes::Bytes;
         use futures::stream;
@@ -1176,6 +1186,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn limit_sse_event_size_allows_event_at_exact_boundary() {
         use bytes::Bytes;
         use futures::stream;
@@ -1192,6 +1203,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn collect_body_with_limit_rejects_oversized_body() {
         use axum::body::Body;
         let big = vec![0u8; 4096];
@@ -1204,6 +1216,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn collect_body_with_limit_accepts_body_under_limit() {
         use axum::body::Body;
         let small = b"{\"model\":\"m\"}".to_vec();
@@ -1235,6 +1248,7 @@ mod tests {
     // ------------------------------------------------------------------
 
     #[tokio::test]
+    #[serial]
     async fn idle_timeout_guard_terminates_silent_stream() {
         use futures::stream;
         use futures::StreamExt as _;
@@ -1251,6 +1265,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn idle_timeout_guard_passes_active_stream() {
         use bytes::Bytes;
         use futures::stream;
@@ -1272,6 +1287,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn idle_timeout_guard_ends_normally_on_upstream_close() {
         use futures::stream;
         use futures::StreamExt as _;
@@ -1316,6 +1332,7 @@ mod tests {
     // ------------------------------------------------------------------
 
     #[tokio::test]
+    #[serial]
     async fn key_rotation_invalidates_old_key() {
         let cfg = json!({
             "enabled": true,
@@ -1360,6 +1377,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn core_feature_switch_disabled_returns_403() {
         // 魔改总开关关闭时，即使网关 enabled=true 也返回 403（而非 404 或透传）
         let router = setup_router(true);
@@ -1381,6 +1399,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn duplicate_alias_returns_400() {
         let cfg = json!({
             "enabled": true,
@@ -1411,6 +1430,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn deleted_provider_returns_404() {
         // 默认配置引用 prov-1，但 memory db 中不存在该 provider → 404
         let router = setup_router(true);
@@ -1424,6 +1444,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn invalid_json_returns_400() {
         let router = setup_router(true);
         let req = http::Request::builder()
@@ -1440,6 +1461,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn wrong_method_returns_405() {
         let router = setup_router(true);
         let req = http::Request::builder()
@@ -1453,6 +1475,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn models_endpoint_does_not_leak_provider_key() {
         let cfg = json!({
             "enabled": true,
@@ -1489,6 +1512,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn error_response_has_stable_code_and_request_id() {
         let router = setup_router(true);
         // 无 Key → 401 missing_api_key + request_id + x-request-id 头
@@ -1511,6 +1535,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn save_gateway_config_rejects_duplicate_alias() {
         // 配置保存层校验：重复 alias 直接报错
         let cfg = json!({

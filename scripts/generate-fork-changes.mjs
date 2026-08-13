@@ -75,19 +75,42 @@ if (!git(["rev-parse", "--verify", `${headFlag}^{commit}`])) {
   process.exit(1);
 }
 
-const commitsTotal = git(["rev-list", "--count", headFlag, "--not", base]);
+// 自我引用修复：若 head 提交是"纯生成物刷新提交"（只修改 FORK_CHANGES.html，
+// 且提交信息以 docs(fork-changes) 开头），统计时回退到其 parent。
+// 否则刷新提交本身会使提交数 +1：本地生成时 head 还是旧提交，提交刷新后
+// CI 复现 head 已是新提交，数字永远差 1 → freshness 校验必失败。
+function effectiveHead(headRef) {
+  const msg = git(["log", "-1", "--format=%s", headRef]) || "";
+  if (!msg.startsWith("docs(fork-changes)")) return headRef;
+  const files = git(["show", "--name-only", "--format=", headRef]);
+  if (files === null) return headRef;
+  const touched = files.split("\n").filter((l) => l.trim() !== "");
+  const onlyHtml =
+    touched.length > 0 &&
+    touched.every((f) => f === "src-tauri/assets/FORK_CHANGES.html");
+  if (!onlyHtml) return headRef;
+  const parent = git(["rev-parse", `${headRef}^`]);
+  if (parent) {
+    console.log(`  （head ${headRef} 为纯生成物刷新提交，按 ${parent} 统计）`);
+    return parent;
+  }
+  return headRef;
+}
+const head = effectiveHead(headFlag);
+
+const commitsTotal = git(["rev-list", "--count", head, "--not", base]);
 const commitsNonMerge = git([
   "rev-list",
   "--count",
   "--no-merges",
-  headFlag,
+  head,
   "--not",
   base,
 ]);
-const shortstat = git(["diff", "--shortstat", base, headFlag]);
+const shortstat = git(["diff", "--shortstat", base, head]);
 // 口径日期取统计对象最近提交日期（而非“今天”）：保证生成器完全确定性，
 // 任意时间重复生成结果一致，CI 的 freshness 校验才可靠。
-const statsDate = git(["log", "-1", "--format=%cs", headFlag]);
+const statsDate = git(["log", "-1", "--format=%cs", head]);
 // 基线短 hash 写入页面：CI 复现时按页面记录的口径生成（消除上游漂移）
 const baseCommit = git(["rev-parse", "--short", `${base}^{commit}`]);
 
