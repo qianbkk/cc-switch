@@ -12,6 +12,7 @@ mod config;
 mod database;
 mod deeplink;
 mod error;
+mod fork_version;
 mod gemini_config;
 mod gemini_mcp;
 mod grok_config;
@@ -1342,6 +1343,7 @@ pub fn run() {
             commands::pick_directory,
             commands::open_external,
             commands::open_fork_changes_html,
+            commands::get_fork_version_info,
             commands::get_init_error,
             commands::get_migration_result,
             commands::get_skills_migration_result,

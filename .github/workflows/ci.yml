@@ -46,6 +46,7 @@ jobs:
               - "tailwind.config.cjs"
               - "postcss.config.cjs"
               - "components.json"
+              - "scripts/**"
               - ".github/workflows/**"
             backend:
               - "src-tauri/**"
@@ -62,6 +63,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          # 完整历史：魔改详情生成器需要 rev-list 统计 fork 独有提交
+          fetch-depth: 0
+
+      - name: Fetch upstream (for fork stats)
+        # 生成器以 upstream/main 为对比基线统计 fork 独有提交/文件/代码行
+        run: |
+          git remote add upstream https://github.com/farion1231/cc-switch.git
+          git fetch upstream main
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -88,6 +98,20 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # 版本一致性校验（第 19 项）：package.json / tauri.conf.json / Cargo.toml
+      # 三处 version 必须一致；发布时 CC_SWITCH_FORK_RELEASE_TAG 的基础版本必须
+      # 等于应用版本（错误 tag 直接阻止发布）。
+      - name: Check version sync
+        run: node scripts/check-version-sync.mjs
+
+      # 魔改详情生成物校验（第 20 项）：运行生成器，若与已提交的
+      # FORK_CHANGES.html 不一致则 CI 失败——强制提交前更新生成物，
+      # 杜绝页面数字/描述过期。
+      - name: Check fork changes freshness
+        run: |
+          node scripts/generate-fork-changes.mjs
+          git diff --exit-code -- src-tauri/assets/FORK_CHANGES.html
 
       - name: TypeScript type check
         run: pnpm typecheck

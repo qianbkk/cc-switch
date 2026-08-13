@@ -55,12 +55,19 @@ jobs:
         shell: pwsh
         run: pnpm install --frozen-lockfile
 
+      - name: Set build metadata (time)
+        shell: pwsh
+        run: echo "CC_SWITCH_BUILD_TIME=$(Get-Date -Format o)" >> $env:GITHUB_ENV
+
       - name: Build Tauri app (exe only, no installers)
         shell: pwsh
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
           # 编译进二进制，供魔改版 updater 判断当前 m* 修订号。
           CC_SWITCH_FORK_RELEASE_TAG: ${{ github.ref_name }}
+          # 编译进二进制，About 页与版本信息展示 commit 与构建时间（第 19 项）。
+          CC_SWITCH_COMMIT_SHA: ${{ github.sha }}
+          CC_SWITCH_BUILD_TIME: ${{ env.CC_SWITCH_BUILD_TIME }}
         run: |
           # 必须用 `tauri build --no-bundle`，不能用裸 `cargo build --release`：
           #

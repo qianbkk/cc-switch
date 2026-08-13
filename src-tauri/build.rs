@@ -3,6 +3,29 @@ fn main() {
     println!("cargo:rustc-env=CC_SWITCH_FORK_RELEASE_TAG={fork_release_tag}");
     println!("cargo:rerun-if-env-changed=CC_SWITCH_FORK_RELEASE_TAG");
 
+    // commit SHA：发布 workflow 显式传入；本地构建 fallback `git rev-parse --short HEAD`
+    // （git 不可用时为空字符串，前端显示 dev 而非 dev+空）。
+    let commit_sha = std::env::var("CC_SWITCH_COMMIT_SHA").unwrap_or_else(|_| {
+        std::process::Command::new("git")
+            .args(["rev-parse", "--short", "HEAD"])
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .and_then(|o| {
+                String::from_utf8(o.stdout)
+                    .ok()
+                    .map(|s| s.trim().to_string())
+            })
+            .unwrap_or_default()
+    });
+    println!("cargo:rustc-env=CC_SWITCH_COMMIT_SHA={commit_sha}");
+    println!("cargo:rerun-if-env-changed=CC_SWITCH_COMMIT_SHA");
+
+    // 构建时间（RFC3339 UTC）：发布 workflow 注入，保证可复现；本地为空。
+    let build_time = std::env::var("CC_SWITCH_BUILD_TIME").unwrap_or_default();
+    println!("cargo:rustc-env=CC_SWITCH_BUILD_TIME={build_time}");
+    println!("cargo:rerun-if-env-changed=CC_SWITCH_BUILD_TIME");
+
     tauri_build::build();
 
     // Windows: Embed Common Controls v6 manifest for test binaries

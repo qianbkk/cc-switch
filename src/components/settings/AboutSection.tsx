@@ -27,6 +27,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { getVersion } from "@tauri-apps/api/app";
+import { invoke } from "@tauri-apps/api/core";
 import { settingsApi } from "@/lib/api";
 import type {
   ToolInstallation,
@@ -222,6 +223,9 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
   const [isLoadingVersion, setIsLoadingVersion] = useState(
     () => appVersionCache === null,
   );
+  // Fork 完整版本（统一网关魔改版专属）：发布构建显示 m<base>-<rev>，
+  // 本地构建显示 dev+<short-sha>（由后端 fork_version 模块统一解析，见第 19 项）。
+  const [forkVersion, setForkVersion] = useState<string | null>(null);
   const [toolVersions, setToolVersions] = useState<ToolVersion[]>(
     () => toolVersionsCache?.data ?? [],
   );
@@ -400,6 +404,13 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
         appVersionCache = appVersion;
         if (active) {
           setVersion(appVersion);
+        }
+        // Fork 完整版本信息（与更新检查共用同一后端解析，杜绝手写漂移）
+        const info = await invoke<{ displayVersion: string }>(
+          "get_fork_version_info",
+        );
+        if (active) {
+          setForkVersion(info.displayVersion);
         }
       } catch (error) {
         console.error("[AboutSection] Failed to load app version", error);
@@ -820,6 +831,11 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
                     <Loader2 className="h-3 w-3 animate-spin" />
                   ) : (
                     <span className="font-medium">{`v${displayVersion}`}</span>
+                  )}
+                  {forkVersion && !isLoadingVersion && (
+                    <span className="font-medium text-primary">
+                      · {forkVersion}
+                    </span>
                   )}
                 </Badge>
                 {isPortable && (

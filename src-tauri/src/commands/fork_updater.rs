@@ -6,7 +6,6 @@ const FORK_REPOSITORY: &str = "qianbkk/cc-switch";
 const FORK_RELEASES_URL: &str = "https://github.com/qianbkk/cc-switch/releases";
 const FORK_RELEASES_API: &str =
     "https://api.github.com/repos/qianbkk/cc-switch/releases?per_page=20";
-const EMBEDDED_FORK_RELEASE_TAG: &str = env!("CC_SWITCH_FORK_RELEASE_TAG");
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -54,13 +53,19 @@ fn parse_fork_version(tag: &str) -> Option<ForkVersion> {
 }
 
 fn current_fork_tag(app_version: &str) -> String {
-    if parse_fork_version(EMBEDDED_FORK_RELEASE_TAG).is_some() {
-        EMBEDDED_FORK_RELEASE_TAG.to_string()
-    } else {
-        // 本地开发构建没有 m* tag。视为基于当前上游版本的 revision 0，
-        // 既能检查真实魔改预发行版，又不会误把上游 release 当成更新源。
-        format!("m{app_version}-0")
-    }
+    crate::fork_version::fork_version_info(app_version).update_tag
+}
+
+/// 获取 Fork 完整版本信息（About 页与前端展示统一读取，路线图第 19 项）。
+///
+/// 返回 `ForkVersionInfo`：基础版本、展示版本（发布 `m<base>-<rev>` /
+/// 本地 `dev+<short-sha>`）、更新检查 tag、commit SHA、构建时间、是否发布构建。
+#[tauri::command]
+pub async fn get_fork_version_info(
+    app: tauri::AppHandle,
+) -> Result<crate::fork_version::ForkVersionInfo, String> {
+    let app_version = app.package_info().version.to_string();
+    Ok(crate::fork_version::fork_version_info(&app_version))
 }
 
 fn select_latest_fork_release<'a>(
