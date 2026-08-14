@@ -54,7 +54,7 @@ use std::sync::Mutex;
 
 /// 当前 Schema 版本号
 /// 每次修改表结构时递增，并在 schema.rs 中添加相应的迁移逻辑
-pub(crate) const SCHEMA_VERSION: i32 = 19;
+pub(crate) const SCHEMA_VERSION: i32 = 16;
 
 /// 安全地序列化 JSON，避免 unwrap panic
 pub(crate) fn to_json_string<T: Serialize>(value: &T) -> Result<String, AppError> {
@@ -165,9 +165,35 @@ impl Database {
                 Self::get_user_version(&conn)?
             };
             if version > SCHEMA_VERSION {
-                return Err(AppError::Database(format!(
-                    "数据库版本过新（{version}），当前应用仅支持 {SCHEMA_VERSION}，请升级应用后再尝试。"
-                )));
+                // 魔改版历史版本 v17/v18/v19（fork 期间自增）：这些版本的结构均为
+                // 上游 SCHEMA_VERSION 的纯超集（只加带 DEFAULT 的列与新增表，见
+                // schema::ensure_fork_schema_on_conn），因此把 user_version 降级回
+                // 与上游一致的版本号即可——同一数据库既能被魔改版打开，也能被原版
+                // 打开，避免「魔改版 ↔ 原版」切换时原版报版本过新而不可用。
+                // 仅当结构确实带有魔改版指纹（proxy_live_backup.managed_hash）时
+                // 才降级，防止把真正未知的未来版本误判为魔改版历史库。
+                if (17..=19).contains(&version) {
+                    let is_fork_history = {
+                        let conn = lock_conn!(db.conn);
+                        Self::table_exists(&conn, "proxy_live_backup")?
+                            && Self::has_column(&conn, "proxy_live_backup", "managed_hash")?
+                    };
+                    if is_fork_history {
+                        log::info!(
+                            "检测到魔改版历史数据库 v{version}（结构为上游超集），降级 user_version 至 {SCHEMA_VERSION} 以兼容原版。"
+                        );
+                        let conn = lock_conn!(db.conn);
+                        Self::set_user_version(&conn, SCHEMA_VERSION)?;
+                    } else {
+                        return Err(AppError::Database(format!(
+                            "数据库版本过新（{version}），当前应用仅支持 {SCHEMA_VERSION}，请升级应用后再尝试。"
+                        )));
+                    }
+                } else {
+                    return Err(AppError::Database(format!(
+                        "数据库版本过新（{version}），当前应用仅支持 {SCHEMA_VERSION}，请升级应用后再尝试。"
+                    )));
+                }
             }
             if version > 0 && version < SCHEMA_VERSION {
                 log::info!(

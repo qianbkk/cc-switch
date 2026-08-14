@@ -433,6 +433,15 @@ impl Database {
         conn.execute("SAVEPOINT schema_migration;", [])
             .map_err(|e| AppError::Database(format!("开启迁移 savepoint 失败: {e}")))?;
 
+        // 先执行魔改版独有结构的幂等保障（补列/建表，不依赖 user_version）。
+        // 保证：从原版数据库（v16，无 original_hash/managed_hash 列、
+        // 无 live_managed_state 表）打开时，魔改版所需结构必然就位。
+        if let Err(e) = Self::ensure_fork_schema_on_conn(conn) {
+            conn.execute("ROLLBACK TO schema_migration;", []).ok();
+            conn.execute("RELEASE schema_migration;", []).ok();
+            return Err(e);
+        }
+
         let mut version = Self::get_user_version(conn)?;
 
         if version > SCHEMA_VERSION {
@@ -524,24 +533,11 @@ impl Database {
                         Self::set_user_version(conn, 15)?;
                     }
                     15 => {
-                        log::info!("迁移数据库从 v15 到 v16（proxy_live_backup 添加 original_hash 列，保护用户手动修改）");
+                        // 与上游 v15 -> v16 语义一致（上游此处为重建 Codex 会话用量），
+                        // 同时补齐魔改版自有的 original_hash 列（结构超集，原版可忽略）。
+                        log::info!("迁移数据库从 v15 到 v16（proxy_live_backup 添加 original_hash 列 + 重建 Codex 会话用量）");
                         Self::migrate_v15_to_v16(conn)?;
                         Self::set_user_version(conn, 16)?;
-                    }
-                    16 => {
-                        log::info!("迁移数据库从 v16 到 v17（proxy_live_backup 添加 managed_hash 列，区分应用自身写入）");
-                        Self::migrate_v16_to_v17(conn)?;
-                        Self::set_user_version(conn, 17)?;
-                    }
-                    17 => {
-                        log::info!("迁移数据库从 v17 到 v18（重建 Codex 会话用量）");
-                        Self::migrate_v17_to_v18(conn)?;
-                        Self::set_user_version(conn, 18)?;
-                    }
-                    18 => {
-                        log::info!("迁移数据库从 v18 到 v19（新增普通 Live 写盘托管指纹）");
-                        Self::migrate_v18_to_v19(conn)?;
-                        Self::set_user_version(conn, 19)?;
                     }
                     _ => {
                         return Err(AppError::Database(format!(
@@ -1551,7 +1547,14 @@ impl Database {
     ///
     /// 旧数据填 ''（空字符串），`live_protection` 会据此跳过校验。
     /// 后续接管时会按需回填该应用的 live 文件 SHA256。
+    /// v15 -> v16 迁移（与上游同版本号语义对齐，并叠加魔改版结构）：
+    /// 1. 重建 Codex 会话用量（上游 v15->v16 的本意，删除旧 codex_session 明细
+    ///    与 cursor，让启动同步按 fork 历史对齐重建）；
+    /// 2. 为 proxy_live_backup 添加 original_hash 列（魔改版：用户手动修改保护，
+    ///    旧数据填 ''，live_protection 会据此跳过校验，后续接管时按需回填）。
     fn migrate_v15_to_v16(conn: &Connection) -> Result<(), AppError> {
+        let codex_dir = crate::codex_config::get_codex_config_dir();
+        crate::services::session_usage_codex::reset_codex_usage_on_conn(conn, &codex_dir)?;
         if Self::table_exists(conn, "proxy_live_backup")? {
             Self::add_column_if_missing(
                 conn,
@@ -1560,13 +1563,28 @@ impl Database {
                 "TEXT NOT NULL DEFAULT ''",
             )?;
         }
-        log::info!("v15 -> v16 迁移完成：proxy_live_backup 已支持 original_hash");
+        log::info!(
+            "v15 -> v16 迁移完成：重建 Codex 会话用量 + proxy_live_backup 支持 original_hash"
+        );
         Ok(())
     }
 
-    /// v16 -> v17: 为 proxy_live_backup 添加最近一次应用写入的 hash。
-    fn migrate_v16_to_v17(conn: &Connection) -> Result<(), AppError> {
+    /// 魔改版独有结构的幂等保障（每次打开都执行，不依赖 user_version）。
+    ///
+    /// 魔改版相对上游 v16 的全部结构变更必须满足「纯超集」约束：
+    /// - 只允许加列（必须带 DEFAULT 或可空，保证原版 INSERT 不受影响）；
+    /// - 只允许新增表（原版忽略未知表）。
+    ///
+    /// 这样同一数据库既能被魔改版打开，也能被原版打开。
+    /// 未来新增魔改版结构时，加在这里并保持超集约束，不要再 bump SCHEMA_VERSION。
+    pub(crate) fn ensure_fork_schema_on_conn(conn: &Connection) -> Result<(), AppError> {
         if Self::table_exists(conn, "proxy_live_backup")? {
+            Self::add_column_if_missing(
+                conn,
+                "proxy_live_backup",
+                "original_hash",
+                "TEXT NOT NULL DEFAULT ''",
+            )?;
             Self::add_column_if_missing(
                 conn,
                 "proxy_live_backup",
@@ -1574,18 +1592,6 @@ impl Database {
                 "TEXT NOT NULL DEFAULT ''",
             )?;
         }
-        log::info!("v16 -> v17 迁移完成：proxy_live_backup 已支持 managed_hash");
-        Ok(())
-    }
-
-    /// v17 -> v18: 重建 Codex 会话用量（上游 v3.18.0 的 v15->v16 迁移，因编号冲突重排到 v17->v18）
-    fn migrate_v17_to_v18(conn: &Connection) -> Result<(), AppError> {
-        let codex_dir = crate::codex_config::get_codex_config_dir();
-        crate::services::session_usage_codex::reset_codex_usage_on_conn(conn, &codex_dir)
-    }
-
-    /// v18 -> v19: 新增普通 Live 写盘的本机托管指纹。
-    fn migrate_v18_to_v19(conn: &Connection) -> Result<(), AppError> {
         conn.execute(
             "CREATE TABLE IF NOT EXISTS live_managed_state (
                 app_type TEXT PRIMARY KEY,
@@ -3293,7 +3299,7 @@ mod tests {
     }
 
     #[test]
-    fn migrate_v15_to_v17_adds_live_backup_hash_columns() -> Result<(), AppError> {
+    fn migrate_v15_to_v16_adds_live_backup_hash_columns() -> Result<(), AppError> {
         let conn = Connection::open_in_memory()?;
         conn.execute(
             "CREATE TABLE proxy_live_backup (
@@ -3317,6 +3323,12 @@ mod tests {
             &conn,
             "proxy_live_backup",
             "original_hash"
+        )?);
+        // managed_hash 由 ensure_fork_schema_on_conn 幂等补齐
+        assert!(Database::has_column(
+            &conn,
+            "proxy_live_backup",
+            "managed_hash"
         )?);
         // 旧数据应填空字符串
         let original_hash: String = conn.query_row(
@@ -3343,11 +3355,12 @@ mod tests {
     }
 
     #[test]
-    fn migrate_v18_to_v19_adds_live_managed_state() -> Result<(), AppError> {
+    fn ensure_fork_schema_recreates_live_managed_state() -> Result<(), AppError> {
         let conn = Connection::open_in_memory()?;
         Database::create_tables_on_conn(&conn)?;
         conn.execute("DROP TABLE live_managed_state", [])?;
-        Database::set_user_version(&conn, 18)?;
+        // 模拟上游 v16 数据库（版本号与魔改版一致，但缺少魔改版独有表）
+        Database::set_user_version(&conn, SCHEMA_VERSION)?;
 
         Database::apply_schema_migrations_on_conn(&conn)?;
 
@@ -3372,7 +3385,7 @@ mod tests {
     }
 
     #[test]
-    fn migrate_v17_to_v18_resets_only_codex_session_usage() -> Result<(), AppError> {
+    fn migrate_v15_to_v16_resets_only_codex_session_usage() -> Result<(), AppError> {
         let conn = Connection::open_in_memory()?;
         Database::create_tables_on_conn(&conn)?;
         conn.execute_batch(
@@ -3393,7 +3406,7 @@ mod tests {
                 ('/old/sessions/rollout-old-00000000-0000-4000-8000-000000000001.jsonl', 1, 1, 1),
                 ('/gemini/tmp/session-123.json', 1, 1, 1);",
         )?;
-        Database::set_user_version(&conn, 17)?;
+        Database::set_user_version(&conn, 15)?;
 
         Database::apply_schema_migrations_on_conn(&conn)?;
 

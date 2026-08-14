@@ -20,7 +20,7 @@
 | 平台 | **仅 Windows**。2026-08-12 起正式舍弃 macOS/Linux（PR #6） |
 | 发布形态 | Windows Portable.zip（`m*` tag 预发行）+ MSI/NSIS 安装器 |
 | 上游 | `farion1231/cc-switch`，长期跟踪、**选择性吸收**（见 §3） |
-| 数据 | SQLite（Schema v18），本地存储；云同步仅隐藏 UI，后端保留 |
+| 数据 | SQLite（Schema **v16，与上游一致**），本地存储；云同步仅隐藏 UI，后端保留 |
 
 ## 2. 仓库结构
 
@@ -134,7 +134,9 @@ git rev-parse main origin/main
 - **2026-08-11**：PR #4 修复 sync_import 二次锁死锁（merge `8ef806a1`）；第 09 项完成。
 - **2026-08-07**：第 07 项 Live 保护接入（`fix/live-protection-phase2`）；第 08 项第一批（PR #3）。
 - **2026-07-28**：合入上游安全修复系列 + Codex/Grok/用量更新；Schema 仍 v18。
-- 数据库结构版本：**Schema v18**；未来版本拒绝 + 迁移前备份（PR #4 顺序修复）。
+- 数据库结构版本：**Schema v16（与上游对齐，2026-08-15 起）**；未来未知版本拒绝 + 迁移前备份（PR #4 顺序修复）。
+- **2026-08-15**：数据库 schema 兼容修复——SCHEMA_VERSION 从 19 降回 **16 与上游一致**。魔改版结构变更改为幂等保障（`schema.rs::ensure_fork_schema_on_conn`，只加带 DEFAULT 的列/新表，保持对上游 v16 的**纯超集**）；存量 v17/18/19 库打开时自动降级版本号（结构不动）；「魔改版 ↔ 原版」双向切换均安全。
+- **数据库结构变更硬约束（2026-08-15 起）**：`SCHEMA_VERSION` **永不 bump 超过上游**；新增结构一律写入 `ensure_fork_schema_on_conn`（幂等），且只允许加列（带 DEFAULT/可空）+ 新增表；禁止删列/改列/加 NOT NULL 无默认值列——违反即破坏与上游的互操作。
 
 ---
 
