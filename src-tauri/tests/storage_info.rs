@@ -42,8 +42,9 @@ fn storage_info_reports_base_dir_and_db_entries() {
     // record count must be a number, never raw contents
     assert!(db.error.is_none(), "healthy db should have no error");
     // schema version should be reported from PRAGMA user_version
+    // （魔改版与上游对齐，当前 SCHEMA_VERSION=16；保持 >= 上游最低版本）
     assert!(
-        db.schema_version.is_some_and(|v| v >= 19),
+        db.schema_version.is_some_and(|v| v >= 16),
         "db should report the current schema version, got {:?}",
         db.schema_version
     );
