@@ -155,15 +155,16 @@ fn normalize_default(default: &Option<String>) -> Option<String> {
 
 /// 构造 `m3.19.1-2` 发布版（schema v18）的等价去敏数据库。
 ///
-/// 当前 v19 相对该发布版只新增 `live_managed_state`；先用当前建表代码得到其余
-/// v18 表结构，再删除该表并把 `user_version` 设回 18，可避免维护一份易漂移的
-/// 超长 SQL fixture，同时仍能精确验证发布版到当前版的文件级启动流程。
-fn create_release_v18_fixture(path: &Path) {
-    let conn = Connection::open(path).expect("open release v18 fixture");
+/// 用当前建表代码构造「历史版本」fixture（先建当前全表，再 DROP 掉该版本
+/// 还不存在的 `live_managed_state`，并把 `user_version` 设为目标版本），
+/// 可避免维护一份易漂移的超长 SQL fixture，同时仍能精确验证文件级启动流程。
+/// version 传入魔改版历史版本（如 18）或上游/中间版本（如 15）。
+fn create_release_fixture(path: &Path, version: i32) {
+    let conn = Connection::open(path).expect("open release fixture");
     Database::create_tables_on_conn(&conn).expect("create release tables");
     conn.execute("DROP TABLE live_managed_state", [])
         .expect("remove v19-only table");
-    Database::set_user_version(&conn, 18).expect("set release schema version");
+    Database::set_user_version(&conn, version).expect("set release schema version");
 
     conn.execute(
         "INSERT INTO providers (
@@ -227,17 +228,20 @@ fn only_db_backup(backup_dir: &Path) -> PathBuf {
 }
 
 #[test]
-fn file_init_upgrades_release_v18_and_keeps_pre_migration_snapshot() {
+fn file_init_downgrades_fork_history_v18_for_upstream_compat() {
     let temp = TempDir::new().expect("create migration temp directory");
     let db_path = temp.path().join("cc-switch.db");
-    create_release_v18_fixture(&db_path);
+    create_release_fixture(&db_path, 18);
 
-    let db = Database::open_and_migrate_at_path(&db_path).expect("upgrade release fixture");
+    let db = Database::open_and_migrate_at_path(&db_path).expect("open fork-history fixture");
     let conn = db.conn.lock().expect("lock upgraded database");
+    // 魔改版历史 v18（结构为上游超集）：user_version 降级回上游一致版本，
+    // 原版可打开；同时 ensure_fork_schema 重建 v19 独有表。
     assert_eq!(
-        Database::get_user_version(&conn).expect("read upgraded version"),
-        19
+        Database::get_user_version(&conn).expect("read downgraded version"),
+        SCHEMA_VERSION
     );
+    assert!(Database::table_exists(&conn, "live_managed_state").expect("check fork table"));
 
     let provider: (String, String) = conn
         .query_row(
@@ -288,28 +292,19 @@ fn file_init_upgrades_release_v18_and_keeps_pre_migration_snapshot() {
     assert_eq!(live_backup.0, r#"{"apiKey":"user-original"}"#);
     assert_eq!(live_backup.1, "original-fixture-hash");
     assert_eq!(live_backup.2, "managed-fixture-hash");
-    assert!(Database::table_exists(&conn, "live_managed_state").expect("check v19 table"));
     drop(conn);
     drop(db);
 
-    let backup_path = only_db_backup(&temp.path().join("backups"));
-    let backup_conn = Connection::open(&backup_path).expect("open pre-migration backup");
-    assert_eq!(
-        Database::get_user_version(&backup_conn).expect("read backup version"),
-        18
-    );
+    // 降级路径不触发「迁移前备份」（版本号只是降级、表结构未动），
+    // 备份目录应为空——保证降级是纯元数据操作，零写入风险。
+    let backups_dir = temp.path().join("backups");
     assert!(
-        !Database::table_exists(&backup_conn, "live_managed_state").expect("check backup schema"),
-        "pre-migration snapshot must not contain the v19-only table"
+        backups_dir
+            .read_dir()
+            .map(|mut it| it.next().is_none())
+            .unwrap_or(true),
+        "downgrade must not create a pre-migration backup"
     );
-    let retained_backup: String = backup_conn
-        .query_row(
-            "SELECT original_config FROM proxy_live_backup WHERE app_type = 'claude'",
-            [],
-            |row| row.get(0),
-        )
-        .expect("read live backup from snapshot");
-    assert_eq!(retained_backup, r#"{"apiKey":"user-original"}"#);
 }
 
 #[test]
@@ -321,7 +316,8 @@ fn file_init_rejects_future_version_before_writing_schema() {
         .expect("create sentinel");
     conn.execute("INSERT INTO sentinel (value) VALUES ('untouched')", [])
         .expect("seed sentinel");
-    Database::set_user_version(&conn, SCHEMA_VERSION + 1).expect("set future version");
+    // 20 是未知的未来版本（17/18/19 为魔改版历史版本，会降级而非拒绝）
+    Database::set_user_version(&conn, 20).expect("set future version");
     drop(conn);
 
     let error = match Database::open_and_migrate_at_path(&db_path) {
@@ -333,7 +329,7 @@ fn file_init_rejects_future_version_before_writing_schema() {
     let conn = Connection::open(&db_path).expect("reopen future-version database");
     assert_eq!(
         Database::get_user_version(&conn).expect("read future version"),
-        SCHEMA_VERSION + 1
+        20
     );
     assert!(!Database::table_exists(&conn, "providers").expect("check untouched schema"));
     let value: String = conn
@@ -346,7 +342,8 @@ fn file_init_rejects_future_version_before_writing_schema() {
 fn file_init_aborts_upgrade_when_pre_migration_backup_fails() {
     let temp = TempDir::new().expect("create backup-failure temp directory");
     let db_path = temp.path().join("cc-switch.db");
-    create_release_v18_fixture(&db_path);
+    // 用 v15（真正的升级路径：v15 -> v16 会触发迁移前备份）验证备份失败中止
+    create_release_fixture(&db_path, 15);
     fs::write(temp.path().join("backups"), "not a directory").expect("block backup directory");
 
     let error = match Database::open_and_migrate_at_path(&db_path) {
@@ -362,9 +359,101 @@ fn file_init_aborts_upgrade_when_pre_migration_backup_fails() {
     let conn = Connection::open(&db_path).expect("reopen unchanged database");
     assert_eq!(
         Database::get_user_version(&conn).expect("read unchanged version"),
-        18
+        15
     );
     assert!(!Database::table_exists(&conn, "live_managed_state").expect("check unchanged schema"));
+}
+
+#[test]
+fn file_init_downgrades_fork_history_v19_and_keeps_fork_schema() {
+    // 当前已发布的魔改版（SCHEMA_VERSION=19 时代）数据库：结构含
+    // original_hash/managed_hash 列与 live_managed_state 表。
+    // 新魔改版打开后：user_version 降级为 16（与上游一致），结构完整保留。
+    let temp = TempDir::new().expect("create v19 temp directory");
+    let db_path = temp.path().join("cc-switch.db");
+    let conn = Connection::open(&db_path).expect("open v19 database");
+    Database::create_tables_on_conn(&conn).expect("create tables");
+    conn.execute(
+        "INSERT INTO providers (id, app_type, name, settings_config)
+         VALUES ('v19-provider', 'claude', 'V19 Provider', '{}')",
+        [],
+    )
+    .expect("seed provider");
+    Database::set_user_version(&conn, 19).expect("set v19 version");
+    drop(conn);
+
+    let db = Database::open_and_migrate_at_path(&db_path).expect("open v19 database");
+    let conn = db.conn.lock().expect("lock v19 database");
+    assert_eq!(
+        Database::get_user_version(&conn).expect("read downgraded version"),
+        SCHEMA_VERSION
+    );
+    // 魔改版结构必须保留（降级只动 user_version，不动表）
+    assert!(Database::table_exists(&conn, "live_managed_state").expect("check table"));
+    assert!(
+        Database::has_column(&conn, "proxy_live_backup", "managed_hash").expect("check column")
+    );
+    let name: String = conn
+        .query_row(
+            "SELECT name FROM providers WHERE id = 'v19-provider'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("read retained provider");
+    assert_eq!(name, "V19 Provider");
+    drop(conn);
+    drop(db);
+}
+
+#[test]
+fn file_init_opens_upstream_v16_db_and_adds_fork_schema() {
+    // 原版（上游 v16）数据库：proxy_live_backup 只有 3 列、无 live_managed_state。
+    // 魔改版打开后：user_version 保持 16，魔改版所需结构（两列 + 新表）幂等补齐，
+    // 数据不动——这样用户从原版切到魔改版同样无缝。
+    let temp = TempDir::new().expect("create upstream v16 temp directory");
+    let db_path = temp.path().join("cc-switch.db");
+    let conn = Connection::open(&db_path).expect("open upstream v16 database");
+    conn.execute(
+        "CREATE TABLE proxy_live_backup (
+            app_type TEXT PRIMARY KEY,
+            original_config TEXT NOT NULL,
+            backed_up_at TEXT NOT NULL
+        )",
+        [],
+    )
+    .expect("create upstream live backup");
+    conn.execute(
+        "INSERT INTO proxy_live_backup (app_type, original_config, backed_up_at)
+         VALUES ('claude', '{}', '2026-01-01T00:00:00Z')",
+        [],
+    )
+    .expect("seed upstream live backup");
+    Database::set_user_version(&conn, 16).expect("set upstream version");
+    drop(conn);
+
+    let db = Database::open_and_migrate_at_path(&db_path).expect("open upstream v16 database");
+    let conn = db.conn.lock().expect("lock upgraded database");
+    assert_eq!(
+        Database::get_user_version(&conn).expect("read version"),
+        SCHEMA_VERSION
+    );
+    assert!(
+        Database::has_column(&conn, "proxy_live_backup", "original_hash").expect("check column")
+    );
+    assert!(
+        Database::has_column(&conn, "proxy_live_backup", "managed_hash").expect("check column")
+    );
+    assert!(Database::table_exists(&conn, "live_managed_state").expect("check table"));
+    let original_config: String = conn
+        .query_row(
+            "SELECT original_config FROM proxy_live_backup WHERE app_type = 'claude'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("read retained data");
+    assert_eq!(original_config, "{}");
+    drop(conn);
+    drop(db);
 }
 
 #[test]
@@ -395,18 +484,18 @@ fn schema_migration_rolls_back_schema_and_data_when_a_step_fails() {
          END;",
     )
     .expect("create migration failure trigger");
-    // create_tables_on_conn 建的是当前 v19 全表；模拟真实 v17 库结构：
+    // create_tables_on_conn 建的是当前全表；模拟真实 v15 库结构：
     // v19 才新增的 live_managed_state 必须不存在，迁移失败回滚后它也不该出现。
     conn.execute("DROP TABLE live_managed_state", [])
         .expect("drop v19-only table");
-    Database::set_user_version(&conn, 17).expect("set rollback version");
+    Database::set_user_version(&conn, 15).expect("set rollback version");
 
     let error = Database::apply_schema_migrations_on_conn(&conn)
         .expect_err("migration should fail through fixture trigger");
     assert!(error.to_string().contains("fixture migration failure"));
     assert_eq!(
         Database::get_user_version(&conn).expect("read rolled back version"),
-        17
+        15
     );
     assert!(!Database::table_exists(&conn, "live_managed_state").expect("check rolled back schema"));
 
@@ -482,7 +571,8 @@ fn schema_migration_sets_user_version_when_missing() {
 fn schema_migration_rejects_future_version() {
     let conn = Connection::open_in_memory().expect("open memory db");
     Database::create_tables_on_conn(&conn).expect("create tables");
-    Database::set_user_version(&conn, SCHEMA_VERSION + 1).expect("set future version");
+    // 20 是未知的未来版本（17/18/19 为魔改版历史版本，会走降级而非拒绝）
+    Database::set_user_version(&conn, 20).expect("set future version");
 
     let err =
         Database::apply_schema_migrations_on_conn(&conn).expect_err("should reject higher version");
