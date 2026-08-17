@@ -92,6 +92,12 @@ function modelCatalog(
         // Vendor's OFFICIAL base_instructions; omit to inherit the neutral
         // template default. Required by Codex, so the backend always emits one.
         baseInstructions?: string;
+        // Reasoning efforts the vendor's endpoint actually accepts (subset of
+        // none/minimal/low/medium/high/xhigh/max/ultra). Omit to keep the
+        // template's conservative none/high default. Pre-filled from official
+        // vendor docs; users can still edit per provider in the form.
+        reasoningLevels?: string[];
+        defaultReasoningLevel?: string;
       }
   >,
 ): CodexCatalogModel[] {
@@ -105,6 +111,8 @@ function modelCatalog(
           supportsParallelToolCalls: entry.supportsParallelToolCalls,
           inputModalities: entry.inputModalities,
           baseInstructions: entry.baseInstructions,
+          reasoningLevels: entry.reasoningLevels,
+          defaultReasoningLevel: entry.defaultReasoningLevel,
         },
   );
 }
@@ -485,6 +493,10 @@ requires_openai_auth = true`,
         model: "ark-code-latest",
         displayName: "Ark Code Latest",
         contextWindow: 256000,
+        // 四份官方 Codex 接入文档（82379/2556054~2556057）一致限定
+        // model_reasoning_effort 只能是 low/medium/high；none/xhigh/max 是
+        // glm-5-2 专属值（82379/1449737），别名可指向任意后端模型故不可填
+        reasoningLevels: ["low", "medium", "high"],
       },
     ]),
     category: "cn_official",
@@ -518,6 +530,10 @@ requires_openai_auth = true`,
         model: "ark-code-latest",
         displayName: "Ark Code Latest",
         contextWindow: 256000,
+        // 四份官方 Codex 接入文档（82379/2556054~2556057）一致限定
+        // model_reasoning_effort 只能是 low/medium/high；none/xhigh/max 是
+        // glm-5-2 专属值（82379/1449737），别名可指向任意后端模型故不可填
+        reasoningLevels: ["low", "medium", "high"],
       },
     ]),
     category: "cn_official",
@@ -550,6 +566,8 @@ requires_openai_auth = true`,
         model: "ark-code-latest",
         displayName: "Ark Code Latest",
         contextWindow: 256000,
+        // 同 Agent Plan：官方 Codex 文档钉死 low/medium/high 三档
+        reasoningLevels: ["low", "medium", "high"],
       },
     ]),
     category: "cn_official",
@@ -580,6 +598,10 @@ requires_openai_auth = true`,
         model: "doubao-seed-2-1-pro-260628",
         displayName: "Doubao Seed 2.1 Pro",
         contextWindow: 262144,
+        // 方舟深度思考文档（82379/1449737）7 值枚举中本模型无限制的通用四档；
+        // none/xhigh 仅 glm-5-2、max 的 deepseek 名单标注 Responses 待支持。
+        // minimal=方舟的"关闭思考直接回答"档；官方点名本模型服务端默认 high
+        reasoningLevels: ["minimal", "low", "medium", "high"],
       },
     ]),
     category: "cn_official",
@@ -596,15 +618,18 @@ requires_openai_auth = true`,
     config: generateThirdPartyConfig(
       "siliconflow",
       "https://api.siliconflow.cn/v1",
-      "Pro/MiniMaxAI/MiniMax-M2.7",
+      "Pro/MiniMaxAI/MiniMax-M2.5",
     ),
     endpointCandidates: ["https://api.siliconflow.cn/v1"],
     apiFormat: "openai_chat",
     modelCatalog: modelCatalog([
+      // 2026-08-15 盘点：M2.7 在 SiliconFlow 从未上架（两站目录+404 三重佐证），
+      // .cn 站换 M2.5（目录 JSON contextLen=196608）；档位不填——enable_thinking
+      // 能否真正关闭 M2.5 无官方明文（模型卡 Playground schema 不构成证据）
       {
-        model: "Pro/MiniMaxAI/MiniMax-M2.7",
-        displayName: "Pro / MiniMax M2.7",
-        contextWindow: 200000,
+        model: "Pro/MiniMaxAI/MiniMax-M2.5",
+        displayName: "Pro / MiniMax M2.5",
+        contextWindow: 196608,
       },
     ]),
     category: "aggregator",
@@ -621,15 +646,19 @@ requires_openai_auth = true`,
     config: generateThirdPartyConfig(
       "siliconflow_en",
       "https://api.siliconflow.com/v1",
-      "MiniMaxAI/MiniMax-M2.7",
+      "MiniMaxAI/MiniMax-M3",
     ),
     endpointCandidates: ["https://api.siliconflow.com/v1"],
     apiFormat: "openai_chat",
     modelCatalog: modelCatalog([
+      // 2026-08-15 盘点：M2.7 在 SiliconFlow 从未上架，.com 站换 M3（官方页
+      // 1M 窗口=1049K tokens；.cn 站无 M3 勿互套）。SiliconFlow 平台开关是
+      // enable_thinking 布尔（后端按平台推断兜底），M3 可关思考 → 两态
       {
-        model: "MiniMaxAI/MiniMax-M2.7",
-        displayName: "MiniMax M2.7",
-        contextWindow: 200000,
+        model: "MiniMaxAI/MiniMax-M3",
+        displayName: "MiniMax M3",
+        contextWindow: 1048576,
+        reasoningLevels: ["none", "high"],
       },
     ]),
     category: "aggregator",
@@ -1000,6 +1029,8 @@ requires_openai_auth = true`,
     // deepseek-v4-flash 原生 Responses（wire_api=responses 对自家 base_url），无需路由接管转换。
     // 后端按 deepseek.com host 直接镜像官方 models.json（freeform apply_patch +
     // GPT-5 harness + low/high/max 思考档，需 codex >= 0.144.0），这里只保留行清单与展示名。
+    // 档位不预填：镜像的官方 catalog 已带 low/high/max 默认 high（2026-08-15
+    // 复核 flash/pro 逐字节一致），预填 reasoningLevels 反而会覆盖官方声明
     apiFormat: "openai_responses",
     modelCatalog: modelCatalog([
       {
@@ -1095,6 +1126,88 @@ requires_openai_auth = true`,
     iconColor: "#2932E1",
   },
   {
+    // Token Plan 个人版：2026-07-13 起替代 Coding Plan 发售（Coding Plan
+    // 停止新购、存量可用至到期，故上面的旧预设保留）。无别名机制，直接
+    // 指定真实模型 id；官方 Codex 接入指南 wire_api 省略=chat 默认，与
+    // Coding Plan 同走本地路由。API Key 是订阅页专属 Key（非通用应用 Key）
+    name: "Baidu Qianfan Token Plan",
+    websiteUrl: "https://cloud.baidu.com/product/codingplan.html",
+    apiKeyUrl: "https://console.bce.baidu.com/qianfan/resource/token-plan",
+    auth: generateThirdPartyAuth(""),
+    config: generateThirdPartyConfig(
+      "qianfan_tokenplan",
+      "https://qianfan.baidubce.com/v2/tokenplan/personal",
+      "deepseek-v4-pro",
+    ),
+    endpointCandidates: ["https://qianfan.baidubce.com/v2/tokenplan/personal"],
+    apiFormat: "openai_chat",
+    modelCatalog: modelCatalog([
+      // 阵容与排序=Token Plan 个人版文档（2026-08-14 版）；ernie-5.1 官方
+      // 标注 8/20 下线不收。窗口=千帆平台模型列表页口径（2026-08-06 版，
+      // glm-5.1 与官方 OpenCode 接入页 198000 双重印证）
+      {
+        model: "deepseek-v4-pro",
+        displayName: "DeepSeek V4 Pro",
+        contextWindow: 1048576,
+        // thinking + reasoning_effort 双官方清单模型：none=关思考，high/max
+        // =官方仅有的两档真实深度。不声明 default：官方对复杂 Agent 类请求
+        // 自动置 max=回落结果，显式钉 high 反而会压低平台该行为
+        reasoningLevels: ["none", "high", "max"],
+      },
+      {
+        model: "deepseek-v4-flash",
+        displayName: "DeepSeek V4 Flash",
+        contextWindow: 1048576,
+        reasoningLevels: ["none", "high", "max"],
+      },
+      {
+        // 平台模型列表无独立条目、思考双清单均未收录——窗口按 v4-flash
+        // 同款填，档位无证据不造
+        model: "deepseek-v4-flash-0731",
+        displayName: "DeepSeek V4 Flash 0731",
+        contextWindow: 1048576,
+      },
+      {
+        // 千帆平台标 1M（≠智谱自家 coding 端点 200K 口径，窗口是平台部署
+        // 属性）；thinking 清单（2026-05-27 版）未收录，档位不填
+        model: "glm-5.2",
+        displayName: "GLM-5.2",
+        contextWindow: 1048576,
+      },
+      {
+        model: "glm-5.1",
+        displayName: "GLM-5.1",
+        contextWindow: 198000,
+        // thinking 清单内，且官方 OpenCode 接入页在 Token Plan 端点上对它
+        // 一手下发 thinking:{type:"enabled"} → 真实两态
+        reasoningLevels: ["none", "high"],
+      },
+      {
+        // thinking 清单未收录，档位不填
+        model: "kimi-k2.6",
+        displayName: "Kimi K2.6",
+        contextWindow: 262144,
+      },
+    ]),
+    // 与 Coding Plan 的差异：这里开 supportsEffort——Coding Plan 因别名不知
+    // 解析到谁而保持 false；Token Plan catalog 全为显式模型，默认模型
+    // deepseek-v4-pro 在 reasoning_effort 官方清单内（清单仅 v4-pro/v4-flash，
+    // 档位仅 high/max）。effortValueMode:"deepseek"（max/xhigh/ultra→max、
+    // 其余→high）与千帆官方向下兼容映射（low/medium→high、xhigh→max）逐字
+    // 吻合；非清单模型收到 reasoning_effort 按平台明文"忽略不报错"，无害
+    codexChatReasoning: {
+      supportsThinking: true,
+      supportsEffort: true,
+      thinkingParam: "thinking",
+      effortParam: "reasoning_effort",
+      effortValueMode: "deepseek",
+      outputFormat: "reasoning_content",
+    },
+    category: "cn_official",
+    icon: "baidu",
+    iconColor: "#2932E1",
+  },
+  {
     name: "Bailian",
     websiteUrl: "https://bailian.console.aliyun.com",
     apiKeyUrl: "https://bailian.console.aliyun.com/#/api-key",
@@ -1151,12 +1264,17 @@ requires_openai_auth = true`,
         contextWindow: 256000,
         // hy3 不在官方多模态理解模型名单（1823/130988），纯文本
         inputModalities: ["text"],
+        // 官方档位枚举只有 low/high（1823/131208 + 开源权重 chat template
+        // 对其他 effort 值直接 raise）；带 tools 时 low 被服务端升为 high
+        reasoningLevels: ["low", "high"],
       },
       {
         model: "hy3-preview",
         displayName: "Hy3 Preview",
         contextWindow: 256000,
         inputModalities: ["text"],
+        // 同 hy3：官方枚举 low/high（1823/130930 交错式思考模式文档）
+        reasoningLevels: ["low", "high"],
       },
     ]),
     category: "cn_official",
@@ -1176,15 +1294,22 @@ requires_openai_auth = true`,
     endpointCandidates: ["https://api.stepfun.com/step_plan/v1"],
     apiFormat: "openai_chat",
     modelCatalog: modelCatalog([
+      // 档位照抄官方两站模型页与 reasoning 指南（2026-08-15 盘点）：
+      // 3.7-flash 三档默认 medium、2603 两档；无后缀 3.5-flash 官方未暴露
+      // effort，不填。全系无关思考形态，none 一律不列。effort 下发由后端
+      // 按模型推断（2603=low_high 收敛、3.7=passthrough），预设不加
+      // codexChatReasoning——显式声明是 provider 级会丢 per-model 门控
       {
         model: "step-3.7-flash",
         displayName: "Step 3.7 Flash",
         contextWindow: 262144,
+        reasoningLevels: ["low", "medium", "high"],
       },
       {
         model: "step-3.5-flash-2603",
         displayName: "Step 3.5 Flash 2603",
         contextWindow: 262144,
+        reasoningLevels: ["low", "high"],
       },
       {
         model: "step-3.5-flash",
@@ -1209,15 +1334,22 @@ requires_openai_auth = true`,
     endpointCandidates: ["https://api.stepfun.ai/step_plan/v1"],
     apiFormat: "openai_chat",
     modelCatalog: modelCatalog([
+      // 档位照抄官方两站模型页与 reasoning 指南（2026-08-15 盘点）：
+      // 3.7-flash 三档默认 medium、2603 两档；无后缀 3.5-flash 官方未暴露
+      // effort，不填。全系无关思考形态，none 一律不列。effort 下发由后端
+      // 按模型推断（2603=low_high 收敛、3.7=passthrough），预设不加
+      // codexChatReasoning——显式声明是 provider 级会丢 per-model 门控
       {
         model: "step-3.7-flash",
         displayName: "Step 3.7 Flash",
         contextWindow: 262144,
+        reasoningLevels: ["low", "medium", "high"],
       },
       {
         model: "step-3.5-flash-2603",
         displayName: "Step 3.5 Flash 2603",
         contextWindow: 262144,
+        reasoningLevels: ["low", "high"],
       },
       {
         model: "step-3.5-flash",
@@ -1237,14 +1369,18 @@ requires_openai_auth = true`,
     config: generateThirdPartyConfig(
       "modelscope",
       "https://api-inference.modelscope.cn/v1",
-      "ZhipuAI/GLM-5.1",
+      "ZhipuAI/GLM-5.2",
     ),
     endpointCandidates: ["https://api-inference.modelscope.cn/v1"],
     apiFormat: "openai_chat",
     modelCatalog: modelCatalog([
       {
-        model: "ZhipuAI/GLM-5.1",
-        displayName: "ZhipuAI / GLM-5.1",
+        // 2026-08-15 盘点：GLM-5.1 裸 id 不在 ModelScope 免费 API-Inference
+        // 43 条服务清单（只有需自托管阿里云密钥的 :DashScope 变体），换 GLM-5.2
+        //（在清单内、免费"魔搭社区"路由）。档位不填：ModelScope 是否把思考
+        // 字段透传给上游未证实
+        model: "ZhipuAI/GLM-5.2",
+        displayName: "ZhipuAI / GLM-5.2",
         contextWindow: 200000,
       },
     ]),
@@ -1279,6 +1415,10 @@ requires_openai_auth = true`,
         model: "LongCat-2.0",
         displayName: "LongCat 2.0",
         contextWindow: 1048576,
+        // LongCat 无档位可调：全站唯一 effort 证据=官方 Codex 示例的 high；
+        // 关思考走另一字段 thinking:{type:disabled}（effort 拼写无文档），
+        // models API 的 supported_parameters 也不含 reasoning，故不提供 none 假开关
+        reasoningLevels: ["high"],
       },
     ]),
     category: "cn_official",
@@ -1299,7 +1439,9 @@ requires_openai_auth = true`,
     // MiniMax 官方 API 参考已列 /v1/responses 为正式端点（CN/intl 双区，POST /v1/responses），原生 Responses，无需路由接管转换
     apiFormat: "openai_responses",
     // 官方 Codex catalog（platform.minimaxi.com/docs/token-plan/codex-cli）：
-    // shell_command 编辑、并行工具、文本+图像，不声明 freeform apply_patch
+    // shell_command 编辑、并行工具、文本+图像，不声明 freeform apply_patch。
+    // 档位不预填：官方 catalog 就是 none/high 与模板默认一致（M3 的 effort
+    // 是思考开关，minimal/low/medium 端点接受但与 high 行为完全等价）
     modelCatalog: modelCatalog([
       {
         model: "MiniMax-M3",
@@ -1334,7 +1476,9 @@ requires_openai_auth = true`,
     // MiniMax 官方 API 参考已列 /v1/responses 为正式端点（CN/intl 双区，POST /v1/responses），原生 Responses，无需路由接管转换
     apiFormat: "openai_responses",
     // 官方 Codex catalog（platform.minimax.io/docs/token-plan/codex）：
-    // shell_command 编辑、并行工具、文本+图像，不声明 freeform apply_patch
+    // shell_command 编辑、并行工具、文本+图像，不声明 freeform apply_patch。
+    // 档位不预填：官方 catalog 就是 none/high 与模板默认一致（M3 的 effort
+    // 是思考开关，minimal/low/medium 端点接受但与 high 行为完全等价）
     modelCatalog: modelCatalog([
       {
         model: "MiniMax-M3",
@@ -1390,7 +1534,9 @@ requires_openai_auth = true`,
     // 小米 MiMo 官方 Codex 文档已声明原生支持 Responses API（wire_api=responses 对自家 base_url），无需路由接管转换
     apiFormat: "openai_responses",
     // 官方 Codex catalog（mimo.mi.com/.../codex-configuration）：
-    // shell_command 编辑、不声明 freeform apply_patch
+    // shell_command 编辑、不声明 freeform apply_patch。
+    // 档位不预填：官方 catalog 就是 none/high 与模板默认一致（端点另收
+    // low/medium 但官方自述三档"效果一致，暂不区分推理强度"）
     modelCatalog: modelCatalog([
       {
         model: "mimo-v2.5-pro",
@@ -1427,7 +1573,9 @@ requires_openai_auth = true`,
     // 小米 MiMo 官方 Codex 文档已声明原生支持 Responses API（wire_api=responses 对自家 base_url），无需路由接管转换
     apiFormat: "openai_responses",
     // 官方 Codex catalog（mimo.mi.com/.../codex-configuration）：
-    // shell_command 编辑、不声明 freeform apply_patch
+    // shell_command 编辑、不声明 freeform apply_patch。
+    // 档位不预填：官方 catalog 就是 none/high 与模板默认一致（端点另收
+    // low/medium 但官方自述三档"效果一致，暂不区分推理强度"）
     modelCatalog: modelCatalog([
       {
         model: "mimo-v2.5-pro",
@@ -1498,6 +1646,11 @@ requires_openai_auth = true`,
         contextWindow: 500000,
         supportsParallelToolCalls: true,
         inputModalities: ["text", "image"],
+        // xAI Reasoning guide（docs.x.ai，2026-08）模型级枚举 low/medium/high
+        // 默认 high；"Reasoning cannot be disabled" 故无 none 档（模板默认的
+        // none 对 grok-4.5 是无效选项）；xhigh 是 grok-4.6 起才有的档位。
+        // ⚠️ docs.x.ai/developers/grok-4-5 页面实际渲染的是 grok-4.6 内容勿引
+        reasoningLevels: ["low", "medium", "high"],
       },
     ]),
     category: "third_party",
@@ -1521,6 +1674,11 @@ requires_openai_auth = true`,
         contextWindow: 500000,
         supportsParallelToolCalls: true,
         inputModalities: ["text", "image"],
+        // xAI Reasoning guide（docs.x.ai，2026-08）模型级枚举 low/medium/high
+        // 默认 high；"Reasoning cannot be disabled" 故无 none 档（模板默认的
+        // none 对 grok-4.5 是无效选项）；xhigh 是 grok-4.6 起才有的档位。
+        // ⚠️ docs.x.ai/developers/grok-4-5 页面实际渲染的是 grok-4.6 内容勿引
+        reasoningLevels: ["low", "medium", "high"],
       },
     ]),
     category: "third_party",
